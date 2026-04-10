@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AC Tools</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="popup-header">
+        <p class="eyebrow">AC Tools</p>
+        <h1>AlayaCare Toolkit</h1>
+        <p class="subtle">A single extension entry point for scheduler utilities, rotation helpers, and AlayaCare power tools.</p>
+      </header>
+
+      <section class="panel status-panel">
+        <div class="panel-row">
+          <div>
+            <h2>Page Status</h2>
+            <p id="status-text" class="subtle">Checking current tab...</p>
+          </div>
+          <button id="refresh-status" type="button" class="secondary-button">Refresh</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-row">
+          <div>
+            <h2>Toolkit</h2>
+            <p class="subtle">Choose a tool. Launchers run immediately; workspace tools open below.</p>
+          </div>
+        </div>
+
+        <div class="tool-grid">
+          <button
+            type="button"
+            class="tool-tile accent"
+            data-tool-action="open-day-view"
+            data-tool-title="Ramona Day View"
+            data-tool-description="Launch the in-page employee comparison overlay on the active AlayaCare tab."
+          >
+            <span class="tool-kicker">Launcher</span>
+            <strong>Ramona Day View</strong>
+            <span>Open the day-view overlay for side-by-side schedule inspection.</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tile"
+            data-tool-panel="availability"
+            data-tool-title="Availability Test"
+            data-tool-description="Post a single-day availability entry through the current AlayaCare session."
+          >
+            <span class="tool-kicker">Workspace</span>
+            <strong>Availability Test</strong>
+            <span>Use Walter’s POST pattern through a structured form.</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tile"
+            data-tool-panel="planned"
+            data-tool-title="Shift Swap"
+            data-tool-description="Planned module for guided employee shift moves and validations."
+          >
+            <span class="tool-kicker">Planned</span>
+            <strong>Shift Swap</strong>
+            <span>Future workflow for employee exchange and move operations.</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tile"
+            data-tool-panel="planned"
+            data-tool-title="Save / Restore"
+            data-tool-description="Planned snapshot tooling for undo and recovery inside AlayaCare."
+          >
+            <span class="tool-kicker">Planned</span>
+            <strong>Save / Restore</strong>
+            <span>Capture page state before bulk edits and restore later.</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tile"
+            data-tool-panel="planned"
+            data-tool-title="Portrait PDF"
+            data-tool-description="Planned PDF output tooling to mirror familiar operational report formats."
+          >
+            <span class="tool-kicker">Planned</span>
+            <strong>Portrait PDF</strong>
+            <span>Generate export formats users already recognize.</span>
+          </button>
+
+          <button
+            type="button"
+            class="tool-tile"
+            data-tool-panel="planned"
+            data-tool-title="Rotation Builder"
+            data-tool-description="Planned home for PCN rotation and union-rule-aware scheduling utilities."
+          >
+            <span class="tool-kicker">Planned</span>
+            <strong>Rotation Builder</strong>
+            <span>Reserve extension space for the larger scheduling toolkit.</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel workspace-panel-shell">
+        <div class="workspace-header">
+          <div>
+            <h2 id="workspace-title">Toolkit Home</h2>
+            <p id="workspace-description" class="subtle">Use the tiles above to launch a tool or open a workspace module.</p>
+          </div>
+        </div>
+
+        <div id="panel-home" class="workspace-panel is-active">
+          <div class="empty-state">
+            <strong>Select a module</strong>
+            <p class="subtle">`Ramona Day View` runs directly on the page. `Availability Test` opens a working form in this drawer.</p>
+          </div>
+        </div>
+
+        <div id="panel-availability" class="workspace-panel" hidden>
+          <form id="availability-form">
+            <label>
+              Employee ID
+              <input id="employeeId" name="employeeId" type="number" min="1" required />
+            </label>
+
+            <div class="grid">
+              <label>
+                Type ID
+                <input id="availabilityTypeId" name="availabilityTypeId" type="number" min="1" required />
+              </label>
+              <label>
+                Date
+                <input id="date" name="date" type="date" required />
+              </label>
+            </div>
+
+            <div class="grid">
+              <label>
+                Start
+                <input id="startTime" name="startTime" type="time" required />
+              </label>
+              <label>
+                End
+                <input id="endTime" name="endTime" type="time" required />
+              </label>
+            </div>
+
+            <label>
+              Description
+              <input id="description" name="description" type="text" maxlength="120" required />
+            </label>
+
+            <button id="post-availability" type="submit" class="primary-button">Post Availability</button>
+          </form>
+        </div>
+
+        <div id="panel-planned" class="workspace-panel" hidden>
+          <div class="empty-state">
+            <strong id="planned-title">Planned Tool</strong>
+            <p id="planned-description" class="subtle">This module has a reserved slot in the app drawer but is not implemented yet.</p>
+          </div>
+        </div>
+
+        <pre id="result-text" class="result-box">Ready.</pre>
+      </section>
+    </div>
+
+    <script type="module" src="/src/popup/main.ts"></script>
+  </body>
+</html>

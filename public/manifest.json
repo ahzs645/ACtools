@@ -1,0 +1,42 @@
+{
+  "name": "AC Tools",
+  "description": "Toolkit for AlayaCare scheduling utilities, shift management, and Rotation Manager workflows.",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "action": {
+    "default_title": "AC Tools",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.alayacare.ca/*",
+    "https://*.alayacare.com/*",
+    "https://*.alayacare.cloud/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.alayacare.ca/*",
+        "https://*.alayacare.com/*",
+        "https://*.alayacare.cloud/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
+
