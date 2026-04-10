@@ -1,7 +1,7 @@
 import type { AvailabilityPostResult, CommandResult, PageStatus, RuntimeMessage } from "../shared/messages";
 import { isContentMessage, isRuntimeMessage } from "../shared/messages";
 import { formatError } from "../shared/errors";
-import { DayViewOverlay } from "./features/DayViewOverlay";
+import { DayViewOverlay } from "./features/dayview";
 import { PageActionButton } from "./features/PageActionButton";
 import { AlayaCareClient } from "./services/AlayaCareClient";
 

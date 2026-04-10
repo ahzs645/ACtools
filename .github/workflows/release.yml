@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+          echo "Tag and package.json agree on version $PKG_VERSION"
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build and package
+        run: npm run package
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AC Tools ${{ github.ref_name }}
+          generate_release_notes: true
+          files: releases/ac-tools-*.zip
+          body: |
+            ## Install
+
+            1. Download `ac-tools-${{ github.ref_name }}.zip` from the assets below.
+            2. Unzip it somewhere stable (the folder must keep existing for the extension to keep working).
+            3. Open `chrome://extensions` in Chrome.
+            4. Turn on **Developer mode** (top right).
+            5. Click **Load unpacked** and select the unzipped folder.
+            6. The AC Tools side panel is now available from the puzzle-piece menu.
+
+            To update later, download the next release zip, replace the folder contents, and click the reload arrow on the extension card in `chrome://extensions`.

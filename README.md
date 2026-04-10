@@ -23,6 +23,7 @@ src/content/              content script, overlay, page integration, AlayaCare A
 src/popup/                shared drawer UI code used by the side panel page
 src/shared/               typed messages and shared helpers
 scripts/build.mjs         build orchestration for popup/background/content
+scripts/package.mjs       version sync, build, and release zip
 ```
 
 ## Development
@@ -46,6 +47,39 @@ npm run build
 ```
 
 Load `dist/` into Chrome via `chrome://extensions` with Developer Mode enabled.
+
+## Installing a release (no build required)
+
+End users do not need to clone the repo or install Node.
+
+1. Open the [latest release](https://github.com/ahzs645/ACtools/releases/latest) and download `ac-tools-vX.Y.Z.zip`.
+2. Unzip it to a stable folder. The folder must keep existing — Chrome reads files from it on every load.
+3. Open `chrome://extensions`.
+4. Turn on **Developer mode** in the top right.
+5. Click **Load unpacked** and pick the unzipped folder.
+6. The AC Tools side panel is now reachable from the extensions toolbar.
+
+To update later, download the next release zip, replace the folder contents, and click the reload icon on the extension card in `chrome://extensions`.
+
+## Releasing
+
+Cutting a release is tag-driven. The GitHub Actions workflow at `.github/workflows/release.yml` triggers on any `v*.*.*` tag push, builds in a clean environment, and publishes a release with the zip attached.
+
+```bash
+# bump the version in package.json and create a matching git tag
+npm version patch     # or minor / major
+git push --follow-tags
+```
+
+The workflow verifies the tag matches `package.json`, runs `npm run typecheck` and `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to a new GitHub release.
+
+To produce a release zip locally without publishing, run:
+
+```bash
+npm run package
+```
+
+This syncs `public/manifest.json` to the version in `package.json`, runs the production build, and writes `releases/ac-tools-v<version>.zip`. The script shells out to the system `zip` command, which is preinstalled on macOS, Linux, and the GitHub Actions Ubuntu runner. On Windows, run it from WSL or install a `zip` binary.
 
 ## Notes
 
