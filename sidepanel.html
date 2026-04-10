@@ -4,18 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AC Tools</title>
-    <script>
-      (function () {
-        try {
-          var params = new URLSearchParams(window.location.search);
-          if (params.get("surface") === "popup") {
-            document.documentElement.dataset.surface = "popup";
-          }
-        } catch (error) {
-          // Default to sidepanel surface if parsing fails.
-        }
-      })();
-    </script>
+    <script src="surface-bootstrap.js"></script>
   </head>
   <body>
     <div id="app">

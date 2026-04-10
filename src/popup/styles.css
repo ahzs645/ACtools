@@ -195,12 +195,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-html[data-surface="popup"] body {
-  width: 420px;
+body {
+  min-width: 420px;
   min-height: 560px;
 }
 
+html[data-surface="popup"] body {
+  width: 420px;
+}
+
 html[data-surface="sidepanel"] body {
+  min-width: 0;
   min-height: 100vh;
 }
 
