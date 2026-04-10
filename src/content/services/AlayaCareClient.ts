@@ -214,11 +214,27 @@ export class AlayaCareClient {
     }
 
     const me = await this.fetchJson<EmployeeRecord>(`/api/v2/employees/employees/${status.currentUserId}`);
+    let departments = me.departments ?? [];
+
+    if (departments.length === 0) {
+      departments = await this.fetchAllDepartments();
+    }
 
     return {
       status,
-      departments: me.departments ?? []
+      departments
     };
+  }
+
+  private async fetchAllDepartments(): Promise<Department[]> {
+    try {
+      const response = await this.fetchJson<PagedResponse<Department>>(
+        "/api/v2/employees/departments?count=200"
+      );
+      return response.items ?? [];
+    } catch {
+      return [];
+    }
   }
 }
 
