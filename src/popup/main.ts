@@ -9,6 +9,10 @@ import {
   type PageStatus
 } from "../shared/messages";
 
+const THEME_STORAGE_KEY = "ac-tools-theme";
+
+type Theme = "light" | "dark";
+
 const defaultDate = new Date().toISOString().slice(0, 10);
 
 const defaultDraft: AvailabilityDraft = {
@@ -20,76 +24,42 @@ const defaultDraft: AvailabilityDraft = {
   description: "CHROMIUM EXTENSION"
 };
 
-const {
-  form,
-  statusText,
-  resultText,
-  refreshStatusButton,
-  workspaceTitle,
-  workspaceDescription,
-  plannedTitle,
-  plannedDescription,
-  toolTiles,
-  panels
-} = getPopupElements();
+const elements = getPopupElements();
 
 void init();
 
 async function init(): Promise<void> {
+  await applyStoredTheme();
   await hydrateForm();
   await refreshStatus();
 
-  refreshStatusButton.addEventListener("click", async () => {
-    await refreshStatus();
+  elements.themeToggle.addEventListener("click", () => {
+    void toggleTheme();
   });
 
-  toolTiles.forEach((tile) => {
-    tile.addEventListener("click", async () => {
-      const action = tile.dataset.toolAction;
-      const panelName = tile.dataset.toolPanel;
-      const title = tile.dataset.toolTitle ?? "Toolkit";
-      const description = tile.dataset.toolDescription ?? "";
+  elements.refreshStatusButton.addEventListener("click", () => {
+    void refreshStatus();
+  });
 
-      workspaceTitle.textContent = title;
-      workspaceDescription.textContent = description;
+  elements.detailBackButton.addEventListener("click", () => {
+    showLauncher();
+  });
 
-      if (action === "open-day-view") {
-        setActiveTile(null);
-        showPanel("home");
+  elements.searchInput.addEventListener("input", () => {
+    filterTiles(elements.searchInput.value);
+  });
 
-        await withResult(async () => {
-          const response = await sendRuntimeMessage<void>({ type: "ac/popup/open-day-view" });
-
-          if (!response.ok) {
-            throw new Error(response.error ?? "Unable to open day view.");
-          }
-
-          return "Opened Ramona Day View on the active tab.";
-        });
-        return;
-      }
-
-      if (panelName === "planned") {
-        plannedTitle.textContent = title;
-        plannedDescription.textContent =
-          description || "This module has a reserved slot in the app drawer but is not implemented yet.";
-        showPanel("planned");
-        setActiveTile(tile);
-        return;
-      }
-
-      if (panelName) {
-        showPanel(panelName);
-        setActiveTile(tile);
-      }
+  elements.toolTiles.forEach((tile) => {
+    tile.addEventListener("click", () => {
+      void handleTileClick(tile);
     });
   });
 
-  form.addEventListener("input", () => {
+  elements.form.addEventListener("input", () => {
     void persistDraft(readDraft());
   });
 
-  form.addEventListener("submit", async (event) => {
+  elements.form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     await withResult(async () => {
@@ -107,41 +77,193 @@ async function init(): Promise<void> {
   });
 }
 
-function getPopupElements(): {
+async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
+  const action = tile.dataset.toolAction;
+  const panelName = tile.dataset.toolPanel;
+  const title = tile.dataset.toolTitle ?? "Tool";
+  const subtitle = tile.dataset.toolSubtitle ?? "";
+
+  if (action === "open-day-view") {
+    showDetail(title, subtitle, "day-view");
+    elements.resultText.textContent = "Working\u2026";
+
+    await withResult(async () => {
+      const response = await sendRuntimeMessage<void>({ type: "ac/popup/open-day-view" });
+
+      if (!response.ok) {
+        throw new Error(response.error ?? "Unable to open Day View.");
+      }
+
+      return "Opened Day View on the active tab.";
+    });
+    return;
+  }
+
+  if (panelName === "planned") {
+    elements.plannedTitle.textContent = title;
+    elements.plannedDescription.textContent =
+      subtitle || "This module has a reserved slot in the launcher but is not implemented yet.";
+    showDetail(title, subtitle, "planned");
+    return;
+  }
+
+  if (panelName === "availability") {
+    showDetail(title, subtitle, "availability");
+    elements.resultText.textContent = "Ready.";
+    return;
+  }
+
+  if (panelName) {
+    showDetail(title, subtitle, panelName);
+  }
+}
+
+function showLauncher(): void {
+  elements.launcherView.hidden = false;
+  elements.launcherView.classList.add("is-active");
+  elements.detailView.hidden = true;
+  elements.detailView.classList.remove("is-active");
+  elements.searchInput.focus();
+}
+
+function showDetail(title: string, subtitle: string, panelName: string): void {
+  elements.detailTitle.textContent = title;
+  elements.detailSubtitle.textContent = subtitle;
+  elements.launcherView.hidden = true;
+  elements.launcherView.classList.remove("is-active");
+  elements.detailView.hidden = false;
+  elements.detailView.classList.add("is-active");
+
+  elements.toolPanels.forEach((panel, key) => {
+    const isActive = key === panelName;
+    panel.hidden = !isActive;
+    panel.classList.toggle("is-active", isActive);
+  });
+}
+
+function filterTiles(query: string): void {
+  const normalized = query.trim().toLowerCase();
+  let visible = 0;
+
+  elements.toolTiles.forEach((tile) => {
+    if (!normalized) {
+      tile.hidden = false;
+      visible += 1;
+      return;
+    }
+
+    const haystack = [
+      tile.dataset.toolTitle ?? "",
+      tile.dataset.toolSubtitle ?? "",
+      tile.dataset.searchTerms ?? ""
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matches = haystack.includes(normalized);
+    tile.hidden = !matches;
+
+    if (matches) {
+      visible += 1;
+    }
+  });
+
+  elements.emptySearch.classList.toggle("is-visible", visible === 0);
+}
+
+async function applyStoredTheme(): Promise<void> {
+  try {
+    const stored = await chrome.storage.local.get(THEME_STORAGE_KEY);
+    const value = stored[THEME_STORAGE_KEY];
+    if (value === "light" || value === "dark") {
+      setTheme(value);
+    }
+  } catch {
+    // ignore — fall back to prefers-color-scheme
+  }
+}
+
+async function toggleTheme(): Promise<void> {
+  const current = readActiveTheme();
+  const next: Theme = current === "dark" ? "light" : "dark";
+  setTheme(next);
+
+  try {
+    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: next });
+  } catch {
+    // ignore — runtime may not have storage access
+  }
+}
+
+function setTheme(theme: Theme): void {
+  document.documentElement.dataset.theme = theme;
+}
+
+function readActiveTheme(): Theme {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit === "light" || explicit === "dark") {
+    return explicit;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+interface PopupElements {
   form: HTMLFormElement;
   statusText: HTMLElement;
   resultText: HTMLElement;
   refreshStatusButton: HTMLButtonElement;
-  workspaceTitle: HTMLElement;
-  workspaceDescription: HTMLElement;
+  themeToggle: HTMLButtonElement;
+  searchInput: HTMLInputElement;
+  emptySearch: HTMLElement;
+  launcherView: HTMLElement;
+  detailView: HTMLElement;
+  detailTitle: HTMLElement;
+  detailSubtitle: HTMLElement;
+  detailBackButton: HTMLButtonElement;
   plannedTitle: HTMLElement;
   plannedDescription: HTMLElement;
   toolTiles: HTMLButtonElement[];
-  panels: Map<string, HTMLElement>;
-} {
+  toolPanels: Map<string, HTMLElement>;
+}
+
+function getPopupElements(): PopupElements {
   const form = document.querySelector<HTMLFormElement>("#availability-form");
   const statusText = document.querySelector<HTMLElement>("#status-text");
   const resultText = document.querySelector<HTMLElement>("#result-text");
   const refreshStatusButton = document.querySelector<HTMLButtonElement>("#refresh-status");
-  const workspaceTitle = document.querySelector<HTMLElement>("#workspace-title");
-  const workspaceDescription = document.querySelector<HTMLElement>("#workspace-description");
+  const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
+  const searchInput = document.querySelector<HTMLInputElement>("#tool-search");
+  const emptySearch = document.querySelector<HTMLElement>("#empty-search");
+  const launcherView = document.querySelector<HTMLElement>("#view-launcher");
+  const detailView = document.querySelector<HTMLElement>("#view-detail");
+  const detailTitle = document.querySelector<HTMLElement>("#detail-title");
+  const detailSubtitle = document.querySelector<HTMLElement>("#detail-subtitle");
+  const detailBackButton = document.querySelector<HTMLButtonElement>("#detail-back");
   const plannedTitle = document.querySelector<HTMLElement>("#planned-title");
   const plannedDescription = document.querySelector<HTMLElement>("#planned-description");
-  const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".tool-tile"));
-  const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".workspace-panel"));
-  const panels = new Map(panelElements.map((panel) => [panel.id.replace("panel-", ""), panel]));
+  const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-tile"));
+  const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".tool-panel"));
+  const toolPanels = new Map(
+    panelElements.map((panel) => [panel.id.replace("panel-", ""), panel])
+  );
 
   if (
     !form ||
     !statusText ||
     !resultText ||
     !refreshStatusButton ||
-    !workspaceTitle ||
-    !workspaceDescription ||
+    !themeToggle ||
+    !searchInput ||
+    !emptySearch ||
+    !launcherView ||
+    !detailView ||
+    !detailTitle ||
+    !detailSubtitle ||
+    !detailBackButton ||
     !plannedTitle ||
     !plannedDescription ||
     toolTiles.length === 0 ||
-    panels.size === 0
+    toolPanels.size === 0
   ) {
     throw new Error("Popup elements are missing.");
   }
@@ -151,31 +273,23 @@ function getPopupElements(): {
     statusText,
     resultText,
     refreshStatusButton,
-    workspaceTitle,
-    workspaceDescription,
+    themeToggle,
+    searchInput,
+    emptySearch,
+    launcherView,
+    detailView,
+    detailTitle,
+    detailSubtitle,
+    detailBackButton,
     plannedTitle,
     plannedDescription,
     toolTiles,
-    panels
+    toolPanels
   };
 }
 
-function showPanel(name: string): void {
-  panels.forEach((panel, key) => {
-    const isActive = key === name;
-    panel.hidden = !isActive;
-    panel.classList.toggle("is-active", isActive);
-  });
-}
-
-function setActiveTile(activeTile: HTMLButtonElement | null): void {
-  toolTiles.forEach((tile) => {
-    tile.classList.toggle("is-selected", tile === activeTile);
-  });
-}
-
 async function refreshStatus(): Promise<void> {
-  statusText.textContent = "Checking current tab...";
+  elements.statusText.textContent = "Checking current tab\u2026";
 
   try {
     const response = await sendRuntimeMessage<PageStatus>({ type: "ac/popup/get-status" });
@@ -184,9 +298,9 @@ async function refreshStatus(): Promise<void> {
       throw new Error(response.error ?? "Unable to inspect the current tab.");
     }
 
-    statusText.textContent = buildStatusText(response.data);
+    elements.statusText.textContent = buildStatusText(response.data);
   } catch (error) {
-    statusText.textContent = formatError(error);
+    elements.statusText.textContent = formatError(error);
   }
 }
 
@@ -200,7 +314,7 @@ function buildStatusText(status: PageStatus): string {
 }
 
 function readDraft(): AvailabilityDraft {
-  const formData = new FormData(form);
+  const formData = new FormData(elements.form);
 
   return {
     employeeId: Number(formData.get("employeeId")),
@@ -255,11 +369,11 @@ function setFieldValue(fieldId: keyof AvailabilityDraft, value: string): void {
 }
 
 async function withResult(action: () => Promise<string>): Promise<void> {
-  resultText.textContent = "Working...";
+  elements.resultText.textContent = "Working\u2026";
 
   try {
-    resultText.textContent = await action();
+    elements.resultText.textContent = await action();
   } catch (error) {
-    resultText.textContent = formatError(error);
+    elements.resultText.textContent = formatError(error);
   }
 }

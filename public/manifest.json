@@ -4,14 +4,17 @@
   "version": "0.1.0",
   "manifest_version": 3,
   "action": {
-    "default_title": "AC Tools",
-    "default_popup": "popup.html"
+    "default_title": "AC Tools"
   },
   "permissions": [
     "activeTab",
+    "sidePanel",
     "storage",
     "tabs"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "host_permissions": [
     "https://*.alayacare.ca/*",
     "https://*.alayacare.com/*",
@@ -39,4 +42,3 @@
     }
   ]
 }
-

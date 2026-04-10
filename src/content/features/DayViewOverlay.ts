@@ -1,19 +1,11 @@
 import { formatError } from "../../shared/errors";
 import { addMinutes, ceilTo15, floorTo15, formatHHMMInTimeZone, formatVisitDateTime, parseUtcRruleDate } from "../utils/time";
-import { AlayaCareClient } from "../services/AlayaCareClient";
-
-interface Department {
-  id: number;
-  name: string;
-}
-
-interface EmployeeRecord {
-  id: number;
-  first_name?: string;
-  last_name?: string;
-  _link?: string;
-  alayacare_employee_id?: number;
-}
+import {
+  AlayaCareClient,
+  type Department,
+  type EmployeeRecord,
+  type VisitRecord
+} from "../services/AlayaCareClient";
 
 interface ScheduleOccurrence {
   occStart: Date;
@@ -33,24 +25,6 @@ interface ScheduleRecord {
   };
   availability_type?: {
     name?: string;
-  };
-}
-
-interface VisitRecord {
-  start_at?: string;
-  end_at?: string;
-  status?: string;
-  alayacare_visit_id?: number;
-  visit_id?: number;
-  cancel_code?: {
-    code?: string;
-  };
-  client?: {
-    full_name?: string;
-  };
-  service?: {
-    name?: string;
-    service_code_name?: string;
   };
 }
 
@@ -83,6 +57,7 @@ export class DayViewOverlay {
   private tooltip: HTMLDivElement | null = null;
   private departments: Department[] = [];
   private currentDate = "";
+  private groupFilteringAvailable = false;
   private initialized = false;
 
   constructor(private readonly client: AlayaCareClient) {
@@ -120,6 +95,7 @@ export class DayViewOverlay {
     }
 
     this.departments = context.departments;
+    this.groupFilteringAvailable = context.groupFilteringAvailable;
     this.renderShell();
     this.initialized = true;
   }
@@ -129,6 +105,86 @@ export class DayViewOverlay {
       <style>
         :host {
           all: initial;
+
+          --ac-font-family: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+
+          --ac-radius-small: 2px;
+          --ac-radius-medium: 4px;
+          --ac-radius-large: 6px;
+          --ac-radius-xlarge: 8px;
+          --ac-radius-circular: 9999px;
+
+          --ac-bg-canvas: #f5f5f5;
+          --ac-bg-1: #ffffff;
+          --ac-bg-1-hover: #f5f5f5;
+          --ac-bg-1-pressed: #e0e0e0;
+          --ac-bg-2: #fafafa;
+          --ac-bg-3: #f0f0f0;
+
+          --ac-fg-1: #242424;
+          --ac-fg-2: #424242;
+          --ac-fg-3: #616161;
+          --ac-fg-4: #707070;
+
+          --ac-stroke-1: #d1d1d1;
+          --ac-stroke-2: #e0e0e0;
+          --ac-stroke-subtle: #ebebeb;
+          --ac-stroke-accessible: #616161;
+
+          --ac-brand-bg: #0f6cbd;
+          --ac-brand-bg-hover: #115ea3;
+          --ac-brand-bg-pressed: #0c3b5e;
+          --ac-brand-bg-2: #ebf3fc;
+          --ac-brand-bg-2-hover: #cfe4fa;
+          --ac-brand-fg-1: #0f6cbd;
+          --ac-brand-stroke-1: #0f6cbd;
+
+          --ac-danger-bg: #fde7e9;
+          --ac-danger-fg: #b10e1c;
+          --ac-danger-stroke: #b10e1c;
+
+          --ac-shadow-2: 0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14);
+          --ac-shadow-4: 0 0 2px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.14);
+          --ac-shadow-16: 0 0 2px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.14);
+          --ac-shadow-28: 0 0 8px rgba(0, 0, 0, 0.12), 0 14px 28px rgba(0, 0, 0, 0.24);
+        }
+
+        @media (prefers-color-scheme: dark) {
+          :host {
+            --ac-bg-canvas: #141414;
+            --ac-bg-1: #292929;
+            --ac-bg-1-hover: #3d3d3d;
+            --ac-bg-1-pressed: #1f1f1f;
+            --ac-bg-2: #1f1f1f;
+            --ac-bg-3: #333333;
+
+            --ac-fg-1: #ffffff;
+            --ac-fg-2: #d6d6d6;
+            --ac-fg-3: #adadad;
+            --ac-fg-4: #757575;
+
+            --ac-stroke-1: #666666;
+            --ac-stroke-2: #525252;
+            --ac-stroke-subtle: #3d3d3d;
+            --ac-stroke-accessible: #adadad;
+
+            --ac-brand-bg: #115ea3;
+            --ac-brand-bg-hover: #2886de;
+            --ac-brand-bg-pressed: #0c3b5e;
+            --ac-brand-bg-2: #082338;
+            --ac-brand-bg-2-hover: #0c3b5e;
+            --ac-brand-fg-1: #479ef5;
+            --ac-brand-stroke-1: #479ef5;
+
+            --ac-danger-bg: #3b1a1d;
+            --ac-danger-fg: #f1707b;
+            --ac-danger-stroke: #f1707b;
+
+            --ac-shadow-2: 0 0 2px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.28);
+            --ac-shadow-4: 0 0 2px rgba(0, 0, 0, 0.24), 0 2px 4px rgba(0, 0, 0, 0.28);
+            --ac-shadow-16: 0 0 2px rgba(0, 0, 0, 0.24), 0 8px 16px rgba(0, 0, 0, 0.28);
+            --ac-shadow-28: 0 0 8px rgba(0, 0, 0, 0.24), 0 14px 28px rgba(0, 0, 0, 0.4);
+          }
         }
 
         *, *::before, *::after {
@@ -140,9 +196,15 @@ export class DayViewOverlay {
           inset: 0;
           z-index: 2147483646;
           display: flex;
-          background: rgba(8, 18, 30, 0.2);
-          font-family: Inter, "Segoe UI", sans-serif;
-          color: #0f1720;
+          background: rgba(0, 0, 0, 0.4);
+          font-family: var(--ac-font-family);
+          color: var(--ac-fg-1);
+          font-size: 14px;
+          line-height: 20px;
+        }
+
+        .overlay[hidden] {
+          display: none;
         }
 
         .panel {
@@ -151,75 +213,146 @@ export class DayViewOverlay {
           display: flex;
           flex-direction: column;
           min-height: 0;
-          border-radius: 20px;
-          background: #fcfdfd;
-          border: 1px solid rgba(23, 74, 139, 0.18);
-          box-shadow: 0 20px 60px rgba(15, 23, 32, 0.22);
+          border-radius: var(--ac-radius-xlarge);
+          background: var(--ac-bg-canvas);
+          border: 1px solid var(--ac-stroke-subtle);
+          box-shadow: var(--ac-shadow-28);
           overflow: hidden;
         }
 
         .header {
           display: flex;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 16px;
-          padding: 18px 20px;
-          background: linear-gradient(135deg, #133b70, #215aa5 68%, #3c7fbe);
-          color: #ffffff;
+          padding: 16px 20px;
+          background: var(--ac-bg-1);
+          border-bottom: 1px solid var(--ac-stroke-subtle);
         }
 
-        .header h1 {
-          margin: 0 0 6px;
+        .header__brand {
+          display: flex;
+          align-items: stretch;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .header__accent {
+          width: 4px;
+          align-self: stretch;
+          border-radius: var(--ac-radius-small);
+          background: var(--ac-brand-bg);
+        }
+
+        .header__text {
+          min-width: 0;
+        }
+
+        .header__text h1 {
+          margin: 0 0 4px;
           font-size: 20px;
-          line-height: 1.2;
+          line-height: 28px;
+          font-weight: 600;
+          color: var(--ac-fg-1);
         }
 
-        .header p {
+        .header__text p {
           margin: 0;
           max-width: 760px;
-          font-size: 13px;
-          line-height: 1.5;
-          opacity: 0.88;
+          font-size: 12px;
+          line-height: 16px;
+          color: var(--ac-fg-3);
         }
 
         .close-button {
-          border: none;
-          border-radius: 999px;
-          padding: 10px 14px;
-          height: fit-content;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          border: 1px solid transparent;
+          border-radius: var(--ac-radius-medium);
+          background-color: transparent;
+          color: var(--ac-fg-2);
           cursor: pointer;
-          background: rgba(255, 255, 255, 0.16);
-          color: #ffffff;
-          font-weight: 600;
+          font: inherit;
+          transition: background-color 100ms cubic-bezier(0.33, 0, 0.67, 1);
+          flex-shrink: 0;
+        }
+
+        .close-button:hover {
+          background-color: var(--ac-bg-1-hover);
+          color: var(--ac-fg-1);
+        }
+
+        .close-button:focus-visible {
+          outline: 2px solid var(--ac-brand-stroke-1);
+          outline-offset: 1px;
+        }
+
+        .close-button svg {
+          width: 16px;
+          height: 16px;
         }
 
         .toolbar {
           display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 14px 20px;
-          border-bottom: 1px solid #dbe4ec;
-          background: #ffffff;
+          align-items: flex-end;
+          flex-wrap: wrap;
+          gap: 16px;
+          padding: 12px 20px;
+          background: var(--ac-bg-1);
+          border-bottom: 1px solid var(--ac-stroke-subtle);
         }
 
         .toolbar label {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 4px;
           font-size: 12px;
           font-weight: 600;
-          color: #35506e;
+          color: var(--ac-fg-1);
         }
 
         .toolbar input[type="date"] {
           min-width: 220px;
-          border: 1px solid #bfcddd;
-          border-radius: 10px;
-          padding: 9px 10px;
+          height: 32px;
+          border: 1px solid var(--ac-stroke-1);
+          border-bottom-color: var(--ac-stroke-accessible);
+          border-radius: var(--ac-radius-medium);
+          padding: 0 12px;
           font: inherit;
+          font-size: 14px;
+          color: var(--ac-fg-1);
+          background: var(--ac-bg-1);
+          color-scheme: light dark;
+        }
+
+        .toolbar input[type="date"]:focus {
+          outline: none;
+          border-color: var(--ac-brand-stroke-1);
+          border-bottom-width: 2px;
+          padding-bottom: 0;
+        }
+
+        .toolbar .muted {
+          flex: 1;
+          min-width: 200px;
+        }
+
+        .muted {
+          color: var(--ac-fg-3);
+          font-size: 12px;
+          line-height: 16px;
         }
 
         .error-text {
-          color: #b42318;
+          color: var(--ac-danger-fg);
+          background: var(--ac-danger-bg);
+          border: 1px solid var(--ac-danger-stroke);
+          border-radius: var(--ac-radius-medium);
+          padding: 6px 10px;
           font-size: 12px;
           font-weight: 600;
           white-space: pre-wrap;
@@ -228,65 +361,83 @@ export class DayViewOverlay {
         .columns {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
+          gap: 16px;
           padding: 16px 20px 20px;
           min-height: 0;
           flex: 1;
           overflow: auto;
-          background:
-            radial-gradient(circle at top right, rgba(33, 90, 165, 0.06), transparent 30%),
-            linear-gradient(180deg, #f7fafc, #eef4f8);
+          background: var(--ac-bg-canvas);
         }
 
         .column {
           display: flex;
           flex-direction: column;
           min-height: 0;
-          background: rgba(255, 255, 255, 0.92);
-          border: 1px solid #d6e2ec;
-          border-radius: 18px;
+          background: var(--ac-bg-1);
+          border: 1px solid var(--ac-stroke-subtle);
+          border-radius: var(--ac-radius-large);
           overflow: hidden;
-          box-shadow: 0 12px 32px rgba(14, 23, 32, 0.06);
+          box-shadow: var(--ac-shadow-2);
         }
 
         .column-header {
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          padding: 14px 16px;
-          border-bottom: 1px solid #dbe4ec;
-          background: #f9fbfd;
+          gap: 8px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--ac-stroke-subtle);
+          background: var(--ac-bg-2);
         }
 
         .column-header strong {
-          font-size: 15px;
+          font-size: 14px;
+          line-height: 20px;
+          font-weight: 600;
+          color: var(--ac-fg-1);
         }
 
         .column-header select {
           width: 100%;
-          border: 1px solid #bfcddd;
-          border-radius: 10px;
-          padding: 8px 10px;
+          height: 32px;
+          border: 1px solid var(--ac-stroke-1);
+          border-bottom-color: var(--ac-stroke-accessible);
+          border-radius: var(--ac-radius-medium);
+          padding: 0 8px;
           font: inherit;
-          background: #ffffff;
+          font-size: 14px;
+          background: var(--ac-bg-1);
+          color: var(--ac-fg-1);
+        }
+
+        .column-header select:focus {
+          outline: none;
+          border-color: var(--ac-brand-stroke-1);
+          border-bottom-width: 2px;
         }
 
         .employee-list {
           flex: 1;
           min-height: 0;
           overflow: auto;
-          padding: 10px 12px 14px;
+          padding: 8px;
         }
 
         .employee-row {
-          border: 1px solid #dbe4ec;
-          border-radius: 14px;
-          padding: 10px 12px;
-          background: #ffffff;
+          border: 1px solid var(--ac-stroke-subtle);
+          border-radius: var(--ac-radius-medium);
+          padding: 8px 12px;
+          background: var(--ac-bg-1);
+          transition: background-color 100ms cubic-bezier(0.33, 0, 0.67, 1),
+            border-color 100ms cubic-bezier(0.33, 0, 0.67, 1);
+        }
+
+        .employee-row:hover {
+          background: var(--ac-bg-1-hover);
+          border-color: var(--ac-stroke-1);
         }
 
         .employee-row + .employee-row {
-          margin-top: 10px;
+          margin-top: 6px;
         }
 
         .employee-header {
@@ -297,8 +448,12 @@ export class DayViewOverlay {
           font-weight: 600;
         }
 
+        .employee-header input[type="radio"] {
+          accent-color: var(--ac-brand-bg);
+        }
+
         .employee-link {
-          color: #174a8b;
+          color: var(--ac-brand-fg-1);
           text-decoration: none;
         }
 
@@ -307,64 +462,75 @@ export class DayViewOverlay {
         }
 
         .employee-details {
-          margin-top: 10px;
-          border-top: 1px solid #e6eef5;
-          padding-top: 10px;
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid var(--ac-stroke-subtle);
         }
 
         .schedule-card {
           overflow: auto;
-          border: 1px solid #dbe4ec;
-          border-radius: 12px;
-          background: #fbfdff;
+          border: 1px solid var(--ac-stroke-subtle);
+          border-radius: var(--ac-radius-medium);
+          background: var(--ac-bg-2);
         }
 
         .schedule-card strong {
           display: block;
-          padding: 10px 12px 0;
-          font-size: 12px;
-          color: #35506e;
+          padding: 8px 12px 4px;
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--ac-fg-3);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
         }
 
         table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 11px;
+          font-size: 12px;
         }
 
         thead th {
           position: sticky;
           top: 0;
-          background: #eff5fb;
+          background: var(--ac-bg-1);
           z-index: 1;
           text-align: left;
           padding: 8px 10px;
-          color: #35506e;
-          border-bottom: 1px solid #dbe4ec;
+          color: var(--ac-fg-3);
+          font-weight: 600;
+          border-bottom: 1px solid var(--ac-stroke-subtle);
         }
 
         tbody td {
           padding: 6px 10px;
-          border-bottom: 1px solid #edf2f7;
+          border-bottom: 1px solid var(--ac-stroke-subtle);
           vertical-align: top;
+          color: var(--ac-fg-2);
         }
 
-        tbody tr:nth-child(even) {
-          background: #f8fbfd;
+        tbody tr:last-child td {
+          border-bottom: none;
         }
 
         .visit-icon {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 22px;
-          height: 22px;
+          width: 24px;
+          height: 24px;
           margin-right: 4px;
-          border: 1px solid #aac1dc;
-          border-radius: 999px;
-          background: #e9f2ff;
+          border: 1px solid var(--ac-brand-stroke-1);
+          border-radius: var(--ac-radius-circular);
+          background: var(--ac-brand-bg-2);
+          color: var(--ac-brand-fg-1);
           cursor: pointer;
           font-size: 11px;
+          transition: background-color 100ms cubic-bezier(0.33, 0, 0.67, 1);
+        }
+
+        .visit-icon:hover {
+          background: var(--ac-brand-bg-2-hover);
         }
 
         .tooltip {
@@ -372,14 +538,15 @@ export class DayViewOverlay {
           z-index: 2147483647;
           min-width: 260px;
           max-width: 420px;
-          padding: 10px 12px;
-          border: 1px solid #9eb7d0;
-          border-radius: 12px;
-          background: #ffffff;
-          box-shadow: 0 18px 42px rgba(15, 23, 32, 0.22);
-          color: #102033;
+          padding: 12px 14px;
+          border: 1px solid var(--ac-stroke-1);
+          border-radius: var(--ac-radius-large);
+          background: var(--ac-bg-1);
+          box-shadow: var(--ac-shadow-16);
+          color: var(--ac-fg-1);
+          font-family: var(--ac-font-family);
           font-size: 12px;
-          line-height: 1.45;
+          line-height: 16px;
         }
 
         .tooltip-row + .tooltip-row {
@@ -387,29 +554,40 @@ export class DayViewOverlay {
         }
 
         .tooltip-label {
-          font-weight: 700;
-          color: #35506e;
+          font-weight: 600;
+          color: var(--ac-fg-3);
         }
 
-        .muted {
-          color: #63788e;
-          font-size: 12px;
+        .tooltip-link {
+          color: var(--ac-brand-fg-1);
+          text-decoration: underline;
         }
       </style>
       <div class="overlay" hidden>
         <div class="panel">
           <div class="header">
-            <div>
-              <h1>Ramona Day View</h1>
-              <p>Please choose a date to compare employees, shift placeholders, visits, availabilities, and unavailabilities.</p>
+            <div class="header__brand">
+              <span class="header__accent" aria-hidden="true"></span>
+              <div class="header__text">
+                <h1>Day View</h1>
+                <p>Please choose a date to compare employees, shift placeholders, visits, availabilities, and unavailabilities.</p>
+              </div>
             </div>
-            <button class="close-button" type="button">Close</button>
+            <button class="close-button" type="button" aria-label="Close" title="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 6l12 12" />
+                <path d="M18 6 6 18" />
+              </svg>
+            </button>
           </div>
           <div class="toolbar">
             <label>
               Compare date
               <input class="date-input" type="date" />
             </label>
+            <div class="muted" ${this.groupFilteringAvailable ? "hidden" : ""}>
+              Group filtering is best-effort only on this page. Current-user group data was not exposed in the employee payload.
+            </div>
             <div class="error-text" hidden></div>
           </div>
           <div class="columns"></div>
@@ -780,9 +958,8 @@ function buildVisitAnchor(fullName: string, visitId: string): HTMLAnchorElement 
   link.href = `/#/scheduling/shift/edit/id/${encodeURIComponent(visitId)}/form_type/client?new_modal=true&force_dialog=true`;
   link.target = "_blank";
   link.rel = "noreferrer";
+  link.className = "tooltip-link";
   link.textContent = fullName;
-  link.style.color = "#174a8b";
-  link.style.textDecoration = "underline";
   return link;
 }
 
@@ -912,4 +1089,3 @@ function getDurationMs(item: ScheduleRecord, parts: Record<string, string>): num
 
   return (endTotalMinutes - startTotalMinutes) * 60_000;
 }
-
