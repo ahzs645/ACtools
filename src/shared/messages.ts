@@ -27,6 +27,8 @@ export interface CommandResult<T> {
   error?: string;
 }
 
+export type Surface = "sidepanel" | "popup";
+
 export type RuntimeMessage =
   | {
       type: "ac/popup/get-status";
@@ -37,6 +39,10 @@ export type RuntimeMessage =
   | {
       type: "ac/popup/post-availability";
       payload: AvailabilityDraft;
+    }
+  | {
+      type: "ac/popup/set-surface";
+      payload: Surface;
     }
   | {
       type: "ac/content/get-status";
@@ -50,6 +56,8 @@ export type RuntimeMessage =
     };
 
 export const POPUP_FORM_STORAGE_KEY = "ac-tools-availability-draft";
+export const SURFACE_STORAGE_KEY = "ac-tools-surface";
+export const DEFAULT_SURFACE: Surface = "sidepanel";
 
 export function isRuntimeMessage(value: unknown): value is RuntimeMessage {
   if (!value || typeof value !== "object") {

@@ -1,11 +1,19 @@
 # AC Tools
 
-`AC Tools` is a Manifest V3 Chrome extension scaffold for AlayaCare scheduling utilities. It is structured to turn one-off console scripts into maintainable extension features:
+A Manifest V3 Chrome extension that turns one-off console scripts for AlayaCare scheduling into a maintainable side-panel toolkit.
 
-- `side panel` as a persistent toolkit drawer / app launcher
-- `background` for runtime routing
-- `content` for page integration and overlay UI
-- `shared` for typed messages and common helpers
+## Install
+
+You do not need to clone this repo or install Node. Grab the latest release zip and load it into Chrome.
+
+1. Open the [latest release](https://github.com/ahzs645/ACtools/releases/latest) and download `ac-tools-vX.Y.Z.zip`.
+2. Unzip it to a stable folder. The folder has to keep existing — Chrome reads files from it on every load, so do not put it in `Downloads` if you tend to clean that out.
+3. Open `chrome://extensions`.
+4. Turn on **Developer mode** in the top right.
+5. Click **Load unpacked** and pick the unzipped folder.
+6. AC Tools is now reachable from the extensions toolbar. Click the icon to open the side panel on any AlayaCare tab.
+
+To update later, download the next release zip, replace the folder contents, and hit the reload icon on the AC Tools card in `chrome://extensions`.
 
 ## Current features
 
@@ -14,7 +22,19 @@
 - automatic `AC Tools` page button injection beside `.global-search`
 - planned slots in the drawer for shift swap, save/restore, PDF export, and rotation tooling
 
-## Project structure
+## Notes
+
+- The extension action opens `sidepanel.html` through the Chrome `sidePanel` API instead of a popup.
+- The manifest targets common AlayaCare host patterns (`*.alayacare.ca`, `*.alayacare.com`, `*.alayacare.cloud`) plus `localhost` for local testing.
+- The availability POST uses relative URLs and `credentials: "include"` so it piggybacks on the active AlayaCare session rather than storing credentials in the extension.
+
+---
+
+## For contributors
+
+Everything below is for people working on the extension itself. End users should stick to the [Install](#install) section above.
+
+### Project structure
 
 ```text
 public/manifest.json      Chrome extension manifest
@@ -26,66 +46,34 @@ scripts/build.mjs         build orchestration for popup/background/content
 scripts/package.mjs       version sync, build, and release zip
 ```
 
-## Development
-
-Install dependencies:
+### Development
 
 ```bash
 npm install
+npm run dev        # watch build into dist/
+npm run build      # one-off production build
+npm run typecheck  # tsc --noEmit
 ```
 
-Watch build output into `dist/`:
+While developing, load the `dist/` folder into Chrome via `chrome://extensions` → Developer mode → Load unpacked. The watch build will keep `dist/` in sync; click the reload icon on the extension card after saving.
+
+The build uses Vite for the side panel page and esbuild for `background.js` and `content.js`. `content.js` is bundled as a single classic script so Chrome can load it as a manifest content script without ESM import errors.
+
+### Releasing
+
+Releases are tag-driven. The GitHub Actions workflow at `.github/workflows/release.yml` triggers on any `v*.*.*` tag push, builds in a clean environment, and publishes a GitHub release with the zip attached.
 
 ```bash
-npm run dev
-```
-
-Create a production build:
-
-```bash
-npm run build
-```
-
-Load `dist/` into Chrome via `chrome://extensions` with Developer Mode enabled.
-
-## Installing a release (no build required)
-
-End users do not need to clone the repo or install Node.
-
-1. Open the [latest release](https://github.com/ahzs645/ACtools/releases/latest) and download `ac-tools-vX.Y.Z.zip`.
-2. Unzip it to a stable folder. The folder must keep existing — Chrome reads files from it on every load.
-3. Open `chrome://extensions`.
-4. Turn on **Developer mode** in the top right.
-5. Click **Load unpacked** and pick the unzipped folder.
-6. The AC Tools side panel is now reachable from the extensions toolbar.
-
-To update later, download the next release zip, replace the folder contents, and click the reload icon on the extension card in `chrome://extensions`.
-
-## Releasing
-
-Cutting a release is tag-driven. The GitHub Actions workflow at `.github/workflows/release.yml` triggers on any `v*.*.*` tag push, builds in a clean environment, and publishes a release with the zip attached.
-
-```bash
-# bump the version in package.json and create a matching git tag
-npm version patch     # or minor / major
+npm version patch        # or minor / major — bumps package.json and creates a v* tag
 git push --follow-tags
 ```
 
-The workflow verifies the tag matches `package.json`, runs `npm run typecheck` and `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to a new GitHub release.
+The workflow verifies the tag matches `package.json`, runs typecheck, runs `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to the release. End users then follow the [Install](#install) instructions above.
 
-To produce a release zip locally without publishing, run:
+To produce a release zip locally without publishing:
 
 ```bash
 npm run package
 ```
 
 This syncs `public/manifest.json` to the version in `package.json`, runs the production build, and writes `releases/ac-tools-v<version>.zip`. The script shells out to the system `zip` command, which is preinstalled on macOS, Linux, and the GitHub Actions Ubuntu runner. On Windows, run it from WSL or install a `zip` binary.
-
-## Notes
-
-- The build uses `Vite` for the side panel page and `esbuild` for `background.js` and `content.js`.
-- `content.js` is bundled as a single classic script so Chrome can load it as a manifest content script without ESM import errors.
-- The extension action opens `sidepanel.html` through the Chrome `sidePanel` API instead of a popup.
-- The manifest currently targets common AlayaCare host patterns plus `localhost` for local testing.
-- The popup defaults still use Walter's sample values so the feature is immediately testable.
-- The availability POST uses relative URLs and `credentials: "include"` so it piggybacks on the active AlayaCare session rather than storing credentials in the extension.

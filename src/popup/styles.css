@@ -195,12 +195,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-body:not([data-surface="sidepanel"]) {
+html[data-surface="popup"] body {
   width: 420px;
   min-height: 560px;
 }
 
-body[data-surface="sidepanel"] {
+html[data-surface="sidepanel"] body {
   min-height: 100vh;
 }
 
@@ -752,4 +752,128 @@ body[data-surface="sidepanel"] {
   font-size: var(--ac-font-size-200);
   line-height: var(--ac-line-height-200);
   color: var(--ac-color-neutral-foreground-3);
+}
+
+.settings-section + .settings-section {
+  margin-top: var(--ac-space-20);
+}
+
+.settings-section .section-label {
+  margin-bottom: var(--ac-space-8);
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+}
+
+.radio {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-12);
+  padding: var(--ac-space-12);
+  background-color: var(--ac-color-neutral-background-1);
+  border: 1px solid var(--ac-color-neutral-stroke-subtle);
+  border-radius: var(--ac-radius-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--ac-motion-duration-fast) var(--ac-motion-easing-standard),
+    border-color var(--ac-motion-duration-fast) var(--ac-motion-easing-standard);
+}
+
+.radio:hover {
+  background-color: var(--ac-color-neutral-background-1-hover);
+  border-color: var(--ac-color-neutral-stroke-1);
+}
+
+.radio:has(input[type="radio"]:checked) {
+  border-color: var(--ac-color-brand-stroke-1);
+  background-color: var(--ac-color-brand-background-2);
+}
+
+.radio:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid var(--ac-color-brand-stroke-1);
+  outline-offset: 2px;
+}
+
+.radio input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.radio__indicator {
+  position: relative;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1px solid var(--ac-color-neutral-stroke-accessible);
+  border-radius: var(--ac-radius-circular);
+  background-color: var(--ac-color-neutral-background-1);
+  transition:
+    border-color var(--ac-motion-duration-fast) var(--ac-motion-easing-standard);
+}
+
+.radio:has(input[type="radio"]:checked) .radio__indicator {
+  border-color: var(--ac-color-brand-stroke-1);
+}
+
+.radio:has(input[type="radio"]:checked) .radio__indicator::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ac-radius-circular);
+  background-color: var(--ac-color-brand-background);
+}
+
+.radio__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.radio__title {
+  font-size: var(--ac-font-size-300);
+  line-height: var(--ac-line-height-300);
+  font-weight: var(--ac-font-weight-semibold);
+  color: var(--ac-color-neutral-foreground-1);
+}
+
+.radio__description {
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-200);
+  color: var(--ac-color-neutral-foreground-3);
+}
+
+.settings-hint {
+  margin: var(--ac-space-12) 0 0;
+  padding: var(--ac-space-8) var(--ac-space-12);
+  background-color: var(--ac-color-status-warning-background);
+  color: var(--ac-color-status-warning-foreground);
+  border: 1px solid currentColor;
+  border-radius: var(--ac-radius-medium);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-200);
+}
+
+.settings-hint[hidden] {
+  display: none;
+}
+
+#result-container[hidden] {
+  display: none;
 }

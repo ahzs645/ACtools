@@ -4,13 +4,22 @@ import type {
   AvailabilityPostResult,
   CommandResult,
   PageStatus,
-  RuntimeMessage
+  RuntimeMessage,
+  Surface
 } from "../shared/messages";
-import { isPopupMessage, isRuntimeMessage } from "../shared/messages";
+import {
+  DEFAULT_SURFACE,
+  SURFACE_STORAGE_KEY,
+  isPopupMessage,
+  isRuntimeMessage
+} from "../shared/messages";
 
 const SIDE_PANEL_PATH = "sidepanel.html";
+const POPUP_PATH = "sidepanel.html?surface=popup";
 
-void initializeSidePanel();
+let currentSurface: Surface = DEFAULT_SURFACE;
+
+void initialize();
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isRuntimeMessage(message)) {
@@ -34,7 +43,11 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!("sidePanel" in chrome) || (!changeInfo.url && !tab.url)) {
+  if (currentSurface !== "sidepanel" || !("sidePanel" in chrome)) {
+    return;
+  }
+
+  if (!changeInfo.url && !tab.url) {
     return;
   }
 
@@ -42,7 +55,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
-  if (!("sidePanel" in chrome)) {
+  if (currentSurface !== "sidepanel" || !("sidePanel" in chrome)) {
     return;
   }
 
@@ -52,9 +65,77 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
     .catch(() => undefined);
 });
 
+async function initialize(): Promise<void> {
+  currentSurface = await loadStoredSurface();
+  await applySurface(currentSurface);
+}
+
+async function loadStoredSurface(): Promise<Surface> {
+  try {
+    const stored = await chrome.storage.local.get(SURFACE_STORAGE_KEY);
+    const value = stored[SURFACE_STORAGE_KEY];
+    return value === "popup" ? "popup" : DEFAULT_SURFACE;
+  } catch {
+    return DEFAULT_SURFACE;
+  }
+}
+
+async function applySurface(surface: Surface): Promise<void> {
+  currentSurface = surface;
+
+  try {
+    await chrome.action.setPopup({ popup: surface === "popup" ? POPUP_PATH : "" });
+  } catch (error) {
+    console.warn("Unable to set action popup.", error);
+  }
+
+  if (!("sidePanel" in chrome)) {
+    return;
+  }
+
+  try {
+    await chrome.sidePanel.setPanelBehavior({
+      openPanelOnActionClick: surface === "sidepanel"
+    });
+  } catch (error) {
+    console.warn("Unable to set side panel behavior.", error);
+  }
+
+  const tabs = await chrome.tabs.query({});
+  const taggedTabs = tabs.filter(
+    (tab): tab is chrome.tabs.Tab & { id: number } => typeof tab.id === "number"
+  );
+
+  if (surface === "popup") {
+    await Promise.all(
+      taggedTabs.map((tab) =>
+        chrome.sidePanel
+          .setOptions({ tabId: tab.id, enabled: false })
+          .catch(() => undefined)
+      )
+    );
+    return;
+  }
+
+  await Promise.all(
+    taggedTabs.map((tab) => syncSidePanelForTab(tab.id, tab.url ?? ""))
+  );
+}
+
 async function handlePopupMessage(
   message: Extract<RuntimeMessage, { type: `ac/popup/${string}` }>
 ): Promise<CommandResult<PageStatus | AvailabilityPostResult | void>> {
+  if (message.type === "ac/popup/set-surface") {
+    try {
+      await chrome.storage.local.set({ [SURFACE_STORAGE_KEY]: message.payload });
+    } catch (error) {
+      return { ok: false, error: formatError(error) };
+    }
+
+    await applySurface(message.payload);
+    return { ok: true };
+  }
+
   const tabId = await getActiveTabId();
 
   switch (message.type) {
@@ -75,27 +156,12 @@ async function handlePopupMessage(
   }
 }
 
-async function initializeSidePanel(): Promise<void> {
+async function syncSidePanelForTab(tabId: number, url: string): Promise<void> {
   if (!("sidePanel" in chrome)) {
     return;
   }
 
-  try {
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-
-    const tabs = await chrome.tabs.query({});
-    await Promise.all(
-      tabs
-        .filter((tab): tab is chrome.tabs.Tab & { id: number } => typeof tab.id === "number")
-        .map((tab) => syncSidePanelForTab(tab.id, tab.url ?? ""))
-    );
-  } catch (error) {
-    console.warn("Unable to initialize side panel behavior.", error);
-  }
-}
-
-async function syncSidePanelForTab(tabId: number, url: string): Promise<void> {
-  if (!("sidePanel" in chrome)) {
+  if (currentSurface !== "sidepanel") {
     return;
   }
 

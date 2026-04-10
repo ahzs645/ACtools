@@ -1,11 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-surface="sidepanel">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AC Tools</title>
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get("surface") === "popup") {
+            document.documentElement.dataset.surface = "popup";
+          }
+        } catch (error) {
+          // Default to sidepanel surface if parsing fails.
+        }
+      })();
+    </script>
   </head>
-  <body data-surface="sidepanel">
+  <body>
     <div id="app">
       <header class="app-bar">
         <div class="app-bar__brand">
@@ -37,6 +49,26 @@
               aria-hidden="true"
             >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <button
+            id="settings-button"
+            type="button"
+            class="icon-button"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.21 17.9l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 4.27l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
         </div>
@@ -395,7 +427,60 @@
             </div>
           </div>
 
-          <div class="result">
+          <div id="panel-settings" class="tool-panel">
+            <div class="settings-section">
+              <span class="section-label">Open in</span>
+              <div class="radio-group" role="radiogroup" aria-label="Surface mode">
+                <label class="radio">
+                  <input type="radio" name="surface" value="sidepanel" />
+                  <span class="radio__indicator" aria-hidden="true"></span>
+                  <span class="radio__label">
+                    <span class="radio__title">Side panel</span>
+                    <span class="radio__description">Docked to the side of the browser. Recommended.</span>
+                  </span>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="surface" value="popup" />
+                  <span class="radio__indicator" aria-hidden="true"></span>
+                  <span class="radio__label">
+                    <span class="radio__title">Popup</span>
+                    <span class="radio__description">Floating window above the page when you click the toolbar icon.</span>
+                  </span>
+                </label>
+              </div>
+              <p id="surface-hint" class="settings-hint" hidden></p>
+            </div>
+
+            <div class="settings-section">
+              <span class="section-label">Theme</span>
+              <div class="radio-group" role="radiogroup" aria-label="Theme">
+                <label class="radio">
+                  <input type="radio" name="theme" value="system" />
+                  <span class="radio__indicator" aria-hidden="true"></span>
+                  <span class="radio__label">
+                    <span class="radio__title">System</span>
+                    <span class="radio__description">Match the operating system setting.</span>
+                  </span>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="theme" value="light" />
+                  <span class="radio__indicator" aria-hidden="true"></span>
+                  <span class="radio__label">
+                    <span class="radio__title">Light</span>
+                  </span>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="theme" value="dark" />
+                  <span class="radio__indicator" aria-hidden="true"></span>
+                  <span class="radio__label">
+                    <span class="radio__title">Dark</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="result-container" class="result">
             <span class="section-label">Result</span>
             <pre id="result-text" class="result__output">Ready.</pre>
           </div>

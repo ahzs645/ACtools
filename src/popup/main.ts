@@ -3,15 +3,21 @@ import "./styles.css";
 import { sendRuntimeMessage } from "../shared/chrome";
 import { formatError } from "../shared/errors";
 import {
+  DEFAULT_SURFACE,
   POPUP_FORM_STORAGE_KEY,
+  SURFACE_STORAGE_KEY,
   type AvailabilityDraft,
   type AvailabilityPostResult,
-  type PageStatus
+  type PageStatus,
+  type Surface
 } from "../shared/messages";
 
 const THEME_STORAGE_KEY = "ac-tools-theme";
 
-type Theme = "light" | "dark";
+type ThemeMode = "system" | "light" | "dark";
+
+const SETTINGS_TITLE = "Settings";
+const SETTINGS_SUBTITLE = "Configure how AC Tools opens and looks.";
 
 const defaultDate = new Date().toISOString().slice(0, 10);
 
@@ -24,17 +30,24 @@ const defaultDraft: AvailabilityDraft = {
   description: "CHROMIUM EXTENSION"
 };
 
+let currentSurface: Surface = readInitialSurface();
+
 const elements = getPopupElements();
 
 void init();
 
 async function init(): Promise<void> {
   await applyStoredTheme();
+  await applyStoredSurfaceSelection();
   await hydrateForm();
   await refreshStatus();
 
   elements.themeToggle.addEventListener("click", () => {
     void toggleTheme();
+  });
+
+  elements.settingsButton.addEventListener("click", () => {
+    showSettings();
   });
 
   elements.refreshStatusButton.addEventListener("click", () => {
@@ -52,6 +65,22 @@ async function init(): Promise<void> {
   elements.toolTiles.forEach((tile) => {
     tile.addEventListener("click", () => {
       void handleTileClick(tile);
+    });
+  });
+
+  elements.surfaceRadios.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        void handleSurfaceChange(radio.value as Surface);
+      }
+    });
+  });
+
+  elements.themeRadios.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        void handleThemeChange(radio.value as ThemeMode);
+      }
     });
   });
 
@@ -139,6 +168,13 @@ function showDetail(title: string, subtitle: string, panelName: string): void {
     panel.hidden = !isActive;
     panel.classList.toggle("is-active", isActive);
   });
+
+  elements.resultContainer.hidden = panelName === "settings";
+}
+
+function showSettings(): void {
+  showDetail(SETTINGS_TITLE, SETTINGS_SUBTITLE, "settings");
+  elements.surfaceHint.hidden = true;
 }
 
 function filterTiles(query: string): void {
@@ -171,21 +207,84 @@ function filterTiles(query: string): void {
   elements.emptySearch.classList.toggle("is-visible", visible === 0);
 }
 
-async function applyStoredTheme(): Promise<void> {
+function readInitialSurface(): Surface {
+  const fromHtml = document.documentElement.dataset.surface;
+  if (fromHtml === "popup" || fromHtml === "sidepanel") {
+    return fromHtml;
+  }
+  return DEFAULT_SURFACE;
+}
+
+async function applyStoredSurfaceSelection(): Promise<void> {
+  let stored: Surface = DEFAULT_SURFACE;
   try {
-    const stored = await chrome.storage.local.get(THEME_STORAGE_KEY);
-    const value = stored[THEME_STORAGE_KEY];
-    if (value === "light" || value === "dark") {
-      setTheme(value);
+    const result = await chrome.storage.local.get(SURFACE_STORAGE_KEY);
+    const value = result[SURFACE_STORAGE_KEY];
+    if (value === "popup" || value === "sidepanel") {
+      stored = value;
     }
   } catch {
-    // ignore — fall back to prefers-color-scheme
+    // ignore — fall back to default
+  }
+
+  selectRadio(elements.surfaceRadios, stored);
+}
+
+async function handleSurfaceChange(next: Surface): Promise<void> {
+  try {
+    const response = await sendRuntimeMessage<void>({
+      type: "ac/popup/set-surface",
+      payload: next
+    });
+
+    if (!response.ok) {
+      throw new Error(response.error ?? "Unable to update surface.");
+    }
+  } catch (error) {
+    showSurfaceHint(formatError(error), "danger");
+    return;
+  }
+
+  if (next !== currentSurface) {
+    showSurfaceHint(buildSurfaceMigrationHint(next), "info");
+  } else {
+    elements.surfaceHint.hidden = true;
   }
 }
 
-async function toggleTheme(): Promise<void> {
-  const current = readActiveTheme();
-  const next: Theme = current === "dark" ? "light" : "dark";
+function buildSurfaceMigrationHint(next: Surface): string {
+  if (currentSurface === "sidepanel" && next === "popup") {
+    return "Popup mode is on. Close this side panel and click the AC Tools icon in your toolbar to open the popup.";
+  }
+  if (currentSurface === "popup" && next === "sidepanel") {
+    return "Side panel mode is on. Close this popup and click the AC Tools icon in your toolbar to open the side panel.";
+  }
+  return "";
+}
+
+function showSurfaceHint(message: string, _tone: "info" | "danger"): void {
+  elements.surfaceHint.textContent = message;
+  elements.surfaceHint.hidden = message.length === 0;
+}
+
+async function applyStoredTheme(): Promise<void> {
+  let mode: ThemeMode = "system";
+
+  try {
+    const stored = await chrome.storage.local.get(THEME_STORAGE_KEY);
+    const value = stored[THEME_STORAGE_KEY];
+    if (value === "light" || value === "dark" || value === "system") {
+      mode = value;
+    }
+  } catch {
+    // ignore — fall back to system
+  }
+
+  setTheme(mode);
+  selectRadio(elements.themeRadios, mode);
+}
+
+async function handleThemeChange(next: ThemeMode): Promise<void> {
   setTheme(next);
 
   try {
@@ -195,11 +294,28 @@ async function toggleTheme(): Promise<void> {
   }
 }
 
-function setTheme(theme: Theme): void {
-  document.documentElement.dataset.theme = theme;
+async function toggleTheme(): Promise<void> {
+  const current = readActiveTheme();
+  const next: ThemeMode = current === "dark" ? "light" : "dark";
+  setTheme(next);
+  selectRadio(elements.themeRadios, next);
+
+  try {
+    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: next });
+  } catch {
+    // ignore — runtime may not have storage access
+  }
 }
 
-function readActiveTheme(): Theme {
+function setTheme(mode: ThemeMode): void {
+  if (mode === "system") {
+    delete document.documentElement.dataset.theme;
+    return;
+  }
+  document.documentElement.dataset.theme = mode;
+}
+
+function readActiveTheme(): "light" | "dark" {
   const explicit = document.documentElement.dataset.theme;
   if (explicit === "light" || explicit === "dark") {
     return explicit;
@@ -207,12 +323,20 @@ function readActiveTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function selectRadio(radios: HTMLInputElement[], value: string): void {
+  radios.forEach((radio) => {
+    radio.checked = radio.value === value;
+  });
+}
+
 interface PopupElements {
   form: HTMLFormElement;
   statusText: HTMLElement;
   resultText: HTMLElement;
+  resultContainer: HTMLElement;
   refreshStatusButton: HTMLButtonElement;
   themeToggle: HTMLButtonElement;
+  settingsButton: HTMLButtonElement;
   searchInput: HTMLInputElement;
   emptySearch: HTMLElement;
   launcherView: HTMLElement;
@@ -224,14 +348,19 @@ interface PopupElements {
   plannedDescription: HTMLElement;
   toolTiles: HTMLButtonElement[];
   toolPanels: Map<string, HTMLElement>;
+  surfaceRadios: HTMLInputElement[];
+  themeRadios: HTMLInputElement[];
+  surfaceHint: HTMLElement;
 }
 
 function getPopupElements(): PopupElements {
   const form = document.querySelector<HTMLFormElement>("#availability-form");
   const statusText = document.querySelector<HTMLElement>("#status-text");
   const resultText = document.querySelector<HTMLElement>("#result-text");
+  const resultContainer = document.querySelector<HTMLElement>("#result-container");
   const refreshStatusButton = document.querySelector<HTMLButtonElement>("#refresh-status");
   const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
+  const settingsButton = document.querySelector<HTMLButtonElement>("#settings-button");
   const searchInput = document.querySelector<HTMLInputElement>("#tool-search");
   const emptySearch = document.querySelector<HTMLElement>("#empty-search");
   const launcherView = document.querySelector<HTMLElement>("#view-launcher");
@@ -241,18 +370,27 @@ function getPopupElements(): PopupElements {
   const detailBackButton = document.querySelector<HTMLButtonElement>("#detail-back");
   const plannedTitle = document.querySelector<HTMLElement>("#planned-title");
   const plannedDescription = document.querySelector<HTMLElement>("#planned-description");
+  const surfaceHint = document.querySelector<HTMLElement>("#surface-hint");
   const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-tile"));
   const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".tool-panel"));
   const toolPanels = new Map(
     panelElements.map((panel) => [panel.id.replace("panel-", ""), panel])
+  );
+  const surfaceRadios = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[name="surface"]')
+  );
+  const themeRadios = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[name="theme"]')
   );
 
   if (
     !form ||
     !statusText ||
     !resultText ||
+    !resultContainer ||
     !refreshStatusButton ||
     !themeToggle ||
+    !settingsButton ||
     !searchInput ||
     !emptySearch ||
     !launcherView ||
@@ -262,8 +400,11 @@ function getPopupElements(): PopupElements {
     !detailBackButton ||
     !plannedTitle ||
     !plannedDescription ||
+    !surfaceHint ||
     toolTiles.length === 0 ||
-    toolPanels.size === 0
+    toolPanels.size === 0 ||
+    surfaceRadios.length === 0 ||
+    themeRadios.length === 0
   ) {
     throw new Error("Popup elements are missing.");
   }
@@ -272,8 +413,10 @@ function getPopupElements(): PopupElements {
     form,
     statusText,
     resultText,
+    resultContainer,
     refreshStatusButton,
     themeToggle,
+    settingsButton,
     searchInput,
     emptySearch,
     launcherView,
@@ -284,7 +427,10 @@ function getPopupElements(): PopupElements {
     plannedTitle,
     plannedDescription,
     toolTiles,
-    toolPanels
+    toolPanels,
+    surfaceRadios,
+    themeRadios,
+    surfaceHint
   };
 }
 
