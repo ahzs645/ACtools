@@ -49,15 +49,17 @@ const COLUMN_DEFINITIONS = [
   }
 ] as const;
 
+const TOOLTIP_HIDE_DELAY_MS = 150;
+
 export class DayViewOverlay {
   private readonly host: HTMLDivElement;
   private readonly shadowRoot: ShadowRoot;
   private readonly visitDetailsCache = new Map<string, VisitRecord>();
   private overlay: HTMLDivElement | null = null;
   private tooltip: HTMLDivElement | null = null;
+  private tooltipHideTimer: number | null = null;
   private departments: Department[] = [];
   private currentDate = "";
-  private groupFilteringAvailable = false;
   private initialized = false;
 
   constructor(private readonly client: AlayaCareClient) {
@@ -95,7 +97,6 @@ export class DayViewOverlay {
     }
 
     this.departments = context.departments;
-    this.groupFilteringAvailable = context.groupFilteringAvailable;
     this.renderShell();
     this.initialized = true;
   }
@@ -559,8 +560,102 @@ export class DayViewOverlay {
         }
 
         .tooltip-link {
+          display: inline-block;
+          padding: 1px 8px;
+          border-radius: var(--ac-radius-small);
           color: var(--ac-brand-fg-1);
           text-decoration: underline;
+          font-weight: 600;
+        }
+
+        .tooltip-link--scheduled,
+        .tooltip-link--pending,
+        .tooltip-link--booked {
+          background: #ebf3fc;
+          color: #115ea3;
+        }
+
+        .tooltip-link--confirmed,
+        .tooltip-link--accepted {
+          background: #cfe4fa;
+          color: #0c3b5e;
+        }
+
+        .tooltip-link--in-progress,
+        .tooltip-link--in-route,
+        .tooltip-link--clocked-in,
+        .tooltip-link--started {
+          background: #f3e8ff;
+          color: #5c2e91;
+        }
+
+        .tooltip-link--completed,
+        .tooltip-link--complete,
+        .tooltip-link--done,
+        .tooltip-link--clocked-out {
+          background: #dff6dd;
+          color: #0e700e;
+        }
+
+        .tooltip-link--cancelled,
+        .tooltip-link--canceled,
+        .tooltip-link--declined,
+        .tooltip-link--rejected {
+          background: #fde7e9;
+          color: #b10e1c;
+        }
+
+        .tooltip-link--no-show,
+        .tooltip-link--missed,
+        .tooltip-link--late {
+          background: #fff4ce;
+          color: #835b00;
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .tooltip-link--scheduled,
+          .tooltip-link--pending,
+          .tooltip-link--booked {
+            background: #082338;
+            color: #62abf5;
+          }
+
+          .tooltip-link--confirmed,
+          .tooltip-link--accepted {
+            background: #0c3b5e;
+            color: #9bc7f0;
+          }
+
+          .tooltip-link--in-progress,
+          .tooltip-link--in-route,
+          .tooltip-link--clocked-in,
+          .tooltip-link--started {
+            background: #2b1a47;
+            color: #c3a5e8;
+          }
+
+          .tooltip-link--completed,
+          .tooltip-link--complete,
+          .tooltip-link--done,
+          .tooltip-link--clocked-out {
+            background: #052505;
+            color: #54b054;
+          }
+
+          .tooltip-link--cancelled,
+          .tooltip-link--canceled,
+          .tooltip-link--declined,
+          .tooltip-link--rejected {
+            background: #3b1a1d;
+            color: #f1707b;
+          }
+
+          .tooltip-link--no-show,
+          .tooltip-link--missed,
+          .tooltip-link--late {
+            background: #3d2e00;
+            color: #fce100;
+          }
         }
       </style>
       <div class="overlay" hidden>
@@ -585,9 +680,6 @@ export class DayViewOverlay {
               Compare date
               <input class="date-input" type="date" />
             </label>
-            <div class="muted" ${this.groupFilteringAvailable ? "hidden" : ""}>
-              Group filtering is best-effort only on this page. Current-user group data was not exposed in the employee payload.
-            </div>
             <div class="error-text" hidden></div>
           </div>
           <div class="columns"></div>
@@ -615,6 +707,13 @@ export class DayViewOverlay {
     if (closeButton instanceof HTMLButtonElement) {
       closeButton.addEventListener("click", () => this.close());
     }
+
+    this.tooltip.addEventListener("mouseenter", () => {
+      this.cancelHideTooltip();
+    });
+    this.tooltip.addEventListener("mouseleave", () => {
+      this.scheduleHideTooltip();
+    });
 
     if (dateInput instanceof HTMLInputElement) {
       dateInput.value = new Date().toISOString().slice(0, 10);
@@ -848,13 +947,14 @@ export class DayViewOverlay {
       icon.textContent = "🕐";
       icon.title = [visit.status, visit.cancelCode].filter(Boolean).join(" - ") || "Visit";
       icon.addEventListener("mouseenter", (event) => {
+        this.cancelHideTooltip();
         void this.showVisitTooltip(String(visit.visitId), event);
       });
       icon.addEventListener("mousemove", (event) => {
         this.positionTooltip(event);
       });
       icon.addEventListener("mouseleave", () => {
-        this.hideTooltip();
+        this.scheduleHideTooltip();
       });
       visitsCell.appendChild(icon);
     }
@@ -874,7 +974,12 @@ export class DayViewOverlay {
     try {
       const data = await this.getVisitDetails(visitId);
       this.tooltip.innerHTML = "";
-      this.tooltip.appendChild(tooltipRow("Client", buildVisitAnchor(data.client?.full_name ?? "Unknown client", visitId)));
+      this.tooltip.appendChild(
+        tooltipRow(
+          "Client",
+          buildVisitAnchor(data.client?.full_name ?? "Unknown client", visitId, data.status ?? "")
+        )
+      );
       this.tooltip.appendChild(tooltipRow("Start", document.createTextNode(formatVisitDateTime(data.start_at ?? ""))));
       this.tooltip.appendChild(tooltipRow("Status", document.createTextNode(data.status ?? "")));
       this.tooltip.appendChild(tooltipRow("Service", document.createTextNode(data.service?.name ?? "")));
@@ -908,8 +1013,26 @@ export class DayViewOverlay {
   }
 
   private hideTooltip(): void {
+    this.cancelHideTooltip();
     if (this.tooltip) {
       this.tooltip.hidden = true;
+    }
+  }
+
+  private scheduleHideTooltip(): void {
+    this.cancelHideTooltip();
+    this.tooltipHideTimer = window.setTimeout(() => {
+      this.tooltipHideTimer = null;
+      if (this.tooltip) {
+        this.tooltip.hidden = true;
+      }
+    }, TOOLTIP_HIDE_DELAY_MS);
+  }
+
+  private cancelHideTooltip(): void {
+    if (this.tooltipHideTimer !== null) {
+      window.clearTimeout(this.tooltipHideTimer);
+      this.tooltipHideTimer = null;
     }
   }
 
@@ -953,12 +1076,15 @@ function tooltipRow(label: string, value: Node): HTMLDivElement {
   return row;
 }
 
-function buildVisitAnchor(fullName: string, visitId: string): HTMLAnchorElement {
+function buildVisitAnchor(fullName: string, visitId: string, status: string): HTMLAnchorElement {
   const link = document.createElement("a");
   link.href = `/#/scheduling/shift/edit/id/${encodeURIComponent(visitId)}/form_type/client?new_modal=true&force_dialog=true`;
   link.target = "_blank";
   link.rel = "noreferrer";
-  link.className = "tooltip-link";
+  const normalized = status.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  link.className = normalized
+    ? `tooltip-link tooltip-link--${normalized}`
+    : "tooltip-link";
   link.textContent = fullName;
   return link;
 }

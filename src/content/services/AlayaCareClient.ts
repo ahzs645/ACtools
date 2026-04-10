@@ -15,20 +15,7 @@ export interface Department {
   name: string;
 }
 
-export interface Group {
-  id?: number | string;
-  group_id?: number | string;
-  name?: string;
-}
-
-interface VisibilityScopedEntity {
-  departments?: Department[];
-  department_ids?: Array<number | string>;
-  groups?: Group[];
-  group_ids?: Array<number | string>;
-}
-
-export interface EmployeeRecord extends VisibilityScopedEntity {
+export interface EmployeeRecord {
   id: number;
   first_name?: string;
   last_name?: string;
@@ -36,6 +23,7 @@ export interface EmployeeRecord extends VisibilityScopedEntity {
   alayacare_employee_id?: number;
   status?: string;
   designation?: string;
+  departments?: Department[];
 }
 
 interface PagedResponse<T> {
@@ -53,7 +41,7 @@ interface ScheduleRecord {
   };
 }
 
-export interface ClientRecord extends VisibilityScopedEntity {
+export interface ClientRecord {
   id?: number | string;
   full_name?: string;
 }
@@ -77,8 +65,6 @@ export interface VisitRecord {
 export interface UserContext {
   status: PageStatus;
   departments: Department[];
-  groups: Group[];
-  groupFilteringAvailable: boolean;
 }
 
 export interface ScheduleBundle {
@@ -121,27 +107,19 @@ export class AlayaCareClient {
   }
 
   async getEmployees(departmentId: string, status: string, designation: string): Promise<EmployeeRecord[]> {
-    const [context, response] = await Promise.all([
-      this.getUserContext(),
-      this.fetchJson<PagedResponse<EmployeeRecord>>(
-        `/api/v2/employees/employees?${new URLSearchParams({
-          status,
-          department: departmentId,
-          designation
-        }).toString()}`
-      )
-    ]);
+    const response = await this.fetchJson<PagedResponse<EmployeeRecord>>(
+      `/api/v2/employees/employees?${new URLSearchParams({
+        status,
+        department: departmentId,
+        designation
+      }).toString()}`
+    );
 
-    return (response.items ?? [])
-      .filter((employee) => sharesDepartment(context.departments, employee, departmentId))
-      .filter((employee) => sharesGroup(context.groups, employee))
-      .slice()
-      .sort(compareEmployees);
+    return (response.items ?? []).slice().sort(compareEmployees);
   }
 
   async getSchedule(employeeId: number, visitEmployeeId: number, date: string): Promise<ScheduleBundle> {
-    const [context, availabilities, unavailabilities, visits] = await Promise.all([
-      this.getUserContext(),
+    const [availabilities, unavailabilities, visits] = await Promise.all([
       this.fetchSchedule(`/api/v2/employees/employee/${employeeId}/availabilities`, date),
       this.fetchSchedule(`/api/v2/employees/employee/${employeeId}/unavailabilities`, date),
       this.fetchVisits(visitEmployeeId, date)
@@ -150,7 +128,7 @@ export class AlayaCareClient {
     return {
       availabilities,
       unavailabilities,
-      visits: visits.filter((visit) => sharesGroup(context.groups, visit.client))
+      visits
     };
   }
 
@@ -231,20 +209,15 @@ export class AlayaCareClient {
     if (!status.ready || !status.currentUserId) {
       return {
         status,
-        departments: [],
-        groups: [],
-        groupFilteringAvailable: false
+        departments: []
       };
     }
 
     const me = await this.fetchJson<EmployeeRecord>(`/api/v2/employees/employees/${status.currentUserId}`);
-    const groups = me.groups ?? [];
 
     return {
       status,
-      departments: me.departments ?? [],
-      groups,
-      groupFilteringAvailable: Array.isArray(me.groups) || Array.isArray(me.group_ids)
+      departments: me.departments ?? []
     };
   }
 }
@@ -276,74 +249,3 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-function sharesDepartment(
-  viewerDepartments: Department[],
-  entity: VisibilityScopedEntity | undefined,
-  selectedDepartmentId?: string
-): boolean {
-  const entityDepartmentIds = extractIdSet(entity?.departments, entity?.department_ids, ["id", "department_id"]);
-
-  if (entityDepartmentIds.size === 0) {
-    return true;
-  }
-
-  if (selectedDepartmentId) {
-    return entityDepartmentIds.has(String(selectedDepartmentId));
-  }
-
-  const viewerDepartmentIds = extractIdSet(viewerDepartments, undefined, ["id", "department_id"]);
-  return hasIntersection(viewerDepartmentIds, entityDepartmentIds);
-}
-
-function sharesGroup(viewerGroups: Group[], entity: VisibilityScopedEntity | undefined): boolean {
-  const entityGroupIds = extractIdSet(entity?.groups, entity?.group_ids, ["id", "group_id"]);
-  if (entityGroupIds.size === 0) {
-    return true;
-  }
-
-  const viewerGroupIds = extractIdSet(viewerGroups, undefined, ["id", "group_id"]);
-  if (viewerGroupIds.size === 0) {
-    return true;
-  }
-
-  return hasIntersection(viewerGroupIds, entityGroupIds);
-}
-
-function extractIdSet<T extends object>(
-  items: T[] | undefined,
-  fallbackIds: Array<number | string> | undefined,
-  keys: string[]
-): Set<string> {
-  const values = new Set<string>();
-
-  if (Array.isArray(items)) {
-    for (const item of items) {
-      for (const key of keys) {
-        const candidate = (item as Record<string, unknown>)[key];
-        if (candidate !== undefined && candidate !== null && candidate !== "") {
-          values.add(String(candidate));
-        }
-      }
-    }
-  }
-
-  if (Array.isArray(fallbackIds)) {
-    for (const id of fallbackIds) {
-      if (id !== undefined && id !== null && id !== "") {
-        values.add(String(id));
-      }
-    }
-  }
-
-  return values;
-}
-
-function hasIntersection(left: Set<string>, right: Set<string>): boolean {
-  for (const value of left) {
-    if (right.has(value)) {
-      return true;
-    }
-  }
-
-  return false;
-}

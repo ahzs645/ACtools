@@ -13,7 +13,6 @@
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
 - automatic `AC Tools` page button injection beside `.global-search`
 - planned slots in the drawer for shift swap, save/restore, PDF export, and rotation tooling
-- best-effort same-department and same-group filtering for employees and client visits when those arrays are present in the AlayaCare payload
 
 ## Project structure
 
