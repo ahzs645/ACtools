@@ -561,101 +561,66 @@ export class DayViewOverlay {
 
         .tooltip-link {
           display: inline-block;
-          padding: 1px 8px;
+          padding: 2px 8px;
           border-radius: var(--ac-radius-small);
           color: var(--ac-brand-fg-1);
-          text-decoration: underline;
+          text-decoration: none;
           font-weight: 600;
         }
 
-        .tooltip-link--scheduled,
-        .tooltip-link--pending,
-        .tooltip-link--booked {
-          background: #ebf3fc;
-          color: #115ea3;
+        .tooltip-link:hover {
+          text-decoration: underline;
         }
 
-        .tooltip-link--confirmed,
-        .tooltip-link--accepted {
-          background: #cfe4fa;
-          color: #0c3b5e;
+        .tooltip-link--vacant {
+          background: #b90303;
+          color: #ffffff;
         }
 
-        .tooltip-link--in-progress,
-        .tooltip-link--in-route,
-        .tooltip-link--clocked-in,
-        .tooltip-link--started {
-          background: #f3e8ff;
-          color: #5c2e91;
-        }
-
-        .tooltip-link--completed,
-        .tooltip-link--complete,
-        .tooltip-link--done,
-        .tooltip-link--clocked-out {
-          background: #dff6dd;
-          color: #0e700e;
+        .tooltip-link--on-hold {
+          background: #9fa9b7;
+          color: #ffffff;
         }
 
         .tooltip-link--cancelled,
-        .tooltip-link--canceled,
-        .tooltip-link--declined,
-        .tooltip-link--rejected {
-          background: #fde7e9;
-          color: #b10e1c;
+        .tooltip-link--canceled {
+          background: #797979;
+          color: #ffffff;
         }
 
-        .tooltip-link--no-show,
-        .tooltip-link--missed,
+        .tooltip-link--offered {
+          background: #ee6004;
+          color: #ffffff;
+        }
+
+        .tooltip-link--scheduled {
+          background: #4292b6;
+          color: #ffffff;
+        }
+
+        .tooltip-link--clocked {
+          background: #84b840;
+          color: #ffffff;
+        }
+
         .tooltip-link--late {
-          background: #fff4ce;
-          color: #835b00;
+          background: #6543b3;
+          color: #ffffff;
         }
 
-        @media (prefers-color-scheme: dark) {
-          .tooltip-link--scheduled,
-          .tooltip-link--pending,
-          .tooltip-link--booked {
-            background: #082338;
-            color: #62abf5;
-          }
+        .tooltip-link--completed {
+          background: #162a62;
+          color: #ffffff;
+        }
 
-          .tooltip-link--confirmed,
-          .tooltip-link--accepted {
-            background: #0c3b5e;
-            color: #9bc7f0;
-          }
+        .tooltip-link--missed {
+          background: #f5a623;
+          color: #ffffff;
+        }
 
-          .tooltip-link--in-progress,
-          .tooltip-link--in-route,
-          .tooltip-link--clocked-in,
-          .tooltip-link--started {
-            background: #2b1a47;
-            color: #c3a5e8;
-          }
-
-          .tooltip-link--completed,
-          .tooltip-link--complete,
-          .tooltip-link--done,
-          .tooltip-link--clocked-out {
-            background: #052505;
-            color: #54b054;
-          }
-
-          .tooltip-link--cancelled,
-          .tooltip-link--canceled,
-          .tooltip-link--declined,
-          .tooltip-link--rejected {
-            background: #3b1a1d;
-            color: #f1707b;
-          }
-
-          .tooltip-link--no-show,
-          .tooltip-link--missed,
-          .tooltip-link--late {
-            background: #3d2e00;
-            color: #fce100;
-          }
+        .tooltip-link--approved {
+          background: #386238;
+          color: #ffffff;
         }
       </style>
       <div class="overlay" hidden>
@@ -1010,13 +975,6 @@ export class DayViewOverlay {
 
     this.tooltip.style.left = `${left}px`;
     this.tooltip.style.top = `${top}px`;
-  }
-
-  private hideTooltip(): void {
-    this.cancelHideTooltip();
-    if (this.tooltip) {
-      this.tooltip.hidden = true;
-    }
   }
 
   private scheduleHideTooltip(): void {
