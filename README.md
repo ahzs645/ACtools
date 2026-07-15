@@ -20,6 +20,9 @@ To update later, download the next release zip, replace the folder contents, and
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
 - `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON or a reviewed CSV table
+- `Employee Manager` for authenticated employee search, details, status updates, audit notes, and guarded cross-tenant employee copying with name-based access mapping
+- validated external API credentials that default to memory-only session storage, with an explicit opt-in to remember keys locally in the current Chrome profile; credentials are never synced or embedded in the extension
+- a UAT round-trip test that operates only on a selected employee clearly marked as a test record
 - automatic `AC Tools` page button injection beside `.global-search`
 - planned slots in the drawer for shift swap, save/restore, PDF export, and rotation tooling
 

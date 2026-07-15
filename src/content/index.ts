@@ -56,6 +56,16 @@ async function handleContentMessage(
         ok: true,
         data: await client.exportFormContextCatalog()
       };
+    case "ac/content/list-employees":
+      return {
+        ok: true,
+        data: await client.listEmployees(message.payload)
+      };
+    case "ac/content/get-employee":
+      return {
+        ok: true,
+        data: await client.getEmployeeDetail(message.payload.employeeId)
+      };
     default:
       return {
         ok: false,

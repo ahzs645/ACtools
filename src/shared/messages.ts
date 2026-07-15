@@ -1,4 +1,23 @@
 import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
+import type {
+  EmployeeApiCredentialStatus,
+  EmployeeConfiguredTenant,
+  EmployeeCopyRequest,
+  EmployeeCopyPlanRequest,
+  EmployeeCopyPlanResult,
+  EmployeeCopyResult,
+  EmployeeCopyTargetRequest,
+  EmployeeDetail,
+  EmployeeListRequest,
+  EmployeeListResult,
+  EmployeeStatusUpdate,
+  EmployeeWriteResult
+} from "./employees";
+import type {
+  EnvironmentConfig,
+  EnvironmentHealth,
+  EnvironmentRegistry
+} from "./environments";
 
 export interface AvailabilityDraft {
   employeeId: number;
@@ -46,6 +65,67 @@ export type RuntimeMessage =
       type: "ac/popup/export-form-context-catalog";
     }
   | {
+      type: "ac/popup/list-employees";
+      payload: EmployeeListRequest;
+    }
+  | {
+      type: "ac/popup/get-employee";
+      payload: { employeeId: number };
+    }
+  | {
+      type: "ac/popup/update-employee-status";
+      payload: EmployeeStatusUpdate;
+    }
+  | {
+      type: "ac/popup/get-employee-api-credential-status";
+    }
+  | {
+      type: "ac/popup/set-employee-api-credentials";
+      payload: { publicKey: string; privateKey: string; remember: boolean; origin?: string };
+    }
+  | {
+      type: "ac/popup/clear-employee-api-credentials";
+      payload?: { origin?: string };
+    }
+  | {
+      type: "ac/popup/list-employee-configured-tenants";
+    }
+  | {
+      type: "ac/popup/copy-employee";
+      payload: EmployeeCopyRequest;
+    }
+  | {
+      type: "ac/popup/plan-employee-copy";
+      payload: EmployeeCopyPlanRequest;
+    }
+  | {
+      type: "ac/popup/copy-employee-target";
+      payload: EmployeeCopyTargetRequest;
+    }
+  | {
+      type: "ac/popup/get-environment-registry";
+    }
+  | {
+      type: "ac/popup/save-environment";
+      payload: EnvironmentConfig;
+    }
+  | {
+      type: "ac/popup/delete-environment";
+      payload: { origin: string };
+    }
+  | {
+      type: "ac/popup/set-default-environment";
+      payload: { origin: string | null };
+    }
+  | {
+      type: "ac/popup/import-environments";
+      payload: EnvironmentRegistry;
+    }
+  | {
+      type: "ac/popup/check-environment-health";
+      payload: { origin: string };
+    }
+  | {
       type: "ac/popup/set-surface";
       payload: Surface;
     }
@@ -61,12 +141,29 @@ export type RuntimeMessage =
     }
   | {
       type: "ac/content/export-form-context-catalog";
+    }
+  | {
+      type: "ac/content/list-employees";
+      payload: EmployeeListRequest;
+    }
+  | {
+      type: "ac/content/get-employee";
+      payload: { employeeId: number };
     };
 
 export type ContentCommandData =
   | PageStatus
   | AvailabilityPostResult
   | AlayaCareFormContextCatalogSnapshot
+  | EmployeeListResult
+  | EmployeeDetail
+  | EmployeeWriteResult
+  | EmployeeApiCredentialStatus
+  | EmployeeConfiguredTenant[]
+  | EmployeeCopyResult
+  | EmployeeCopyPlanResult
+  | EnvironmentRegistry
+  | EnvironmentHealth
   | void;
 
 export const POPUP_FORM_STORAGE_KEY = "ac-tools-availability-draft";

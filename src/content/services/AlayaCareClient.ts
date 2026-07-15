@@ -1,4 +1,9 @@
 import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../../shared/messages";
+import type {
+  EmployeeDetail,
+  EmployeeListRequest,
+  EmployeeListResult
+} from "../../shared/employees";
 import {
   buildAlayaCareFormContextCatalog,
   type AlayaCareFormContextCatalogSnapshot
@@ -31,6 +36,7 @@ export interface EmployeeRecord {
 }
 
 interface PagedResponse<T> {
+  count?: number;
   items?: T[];
 }
 
@@ -138,6 +144,30 @@ export class AlayaCareClient {
 
   async getVisitDetails(visitId: string): Promise<VisitRecord> {
     return this.fetchJson<VisitRecord>(`/api/v2/scheduler/visits/${encodeURIComponent(visitId)}`);
+  }
+
+  async listEmployees(request: EmployeeListRequest): Promise<EmployeeListResult> {
+    const count = Math.min(Math.max(request.count ?? 500, 1), 2000);
+    const params = new URLSearchParams({ count: String(count) });
+    if (request.status && request.status !== "all") {
+      params.set("status", request.status);
+    }
+
+    const response = await this.fetchJson<PagedResponse<EmployeeDetail>>(
+      `/ext/api/v2/employees/employees/?${params.toString()}`
+    );
+    const items = (response.items ?? []).slice().sort(compareEmployees);
+
+    return {
+      items,
+      count: response.count ?? items.length
+    };
+  }
+
+  async getEmployeeDetail(employeeId: number): Promise<EmployeeDetail> {
+    return this.fetchJson<EmployeeDetail>(
+      `/ext/api/v2/employees/employees/${encodeURIComponent(employeeId)}`
+    );
   }
 
   async exportFormContextCatalog(): Promise<AlayaCareFormContextCatalogSnapshot> {
@@ -263,7 +293,10 @@ export class AlayaCareClient {
   }
 }
 
-function compareEmployees(left: EmployeeRecord, right: EmployeeRecord): number {
+function compareEmployees(
+  left: { first_name?: string; last_name?: string },
+  right: { first_name?: string; last_name?: string }
+): number {
   const leftLastName = (left.last_name ?? "").toLowerCase();
   const rightLastName = (right.last_name ?? "").toLowerCase();
 

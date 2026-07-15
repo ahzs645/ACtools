@@ -4,6 +4,15 @@ import { sendRuntimeMessage } from "../shared/chrome";
 import { formatError } from "../shared/errors";
 import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
 import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
+import type {
+  EmployeeApiCredentialStatus,
+  EmployeeConfiguredTenant,
+  EmployeeCopyResult,
+  EmployeeDetail,
+  EmployeeListResult,
+  EmployeeSummary,
+  EmployeeWriteResult
+} from "../shared/employees";
 import {
   DEFAULT_SURFACE,
   POPUP_FORM_STORAGE_KEY,
@@ -33,6 +42,12 @@ const defaultDraft: AvailabilityDraft = {
 };
 
 let currentSurface: Surface = readInitialSurface();
+let employeeItems: EmployeeSummary[] = [];
+let selectedEmployee: EmployeeDetail | null = null;
+let employeeApiCredentialsConfigured = false;
+let isUatTenant = false;
+let currentEmployeeOrigin = "";
+let configuredEmployeeTenants: EmployeeConfiguredTenant[] = [];
 
 const elements = getPopupElements();
 
@@ -62,6 +77,38 @@ async function init(): Promise<void> {
 
   elements.catalogCsvExportButton.addEventListener("click", () => {
     void exportFormContextCatalog("csv");
+  });
+
+  elements.employeeRefreshButton.addEventListener("click", () => {
+    void loadEmployees();
+  });
+
+  elements.employeeSearchInput.addEventListener("input", () => {
+    renderEmployeeList();
+  });
+
+  elements.employeeStatusFilter.addEventListener("change", () => {
+    void loadEmployees();
+  });
+
+  elements.employeeUpdateStatusButton.addEventListener("click", () => {
+    void updateSelectedEmployeeStatus();
+  });
+
+  elements.employeeApiSaveButton.addEventListener("click", () => {
+    void saveEmployeeApiCredentials();
+  });
+
+  elements.employeeApiClearButton.addEventListener("click", () => {
+    void clearEmployeeApiCredentials();
+  });
+
+  elements.employeeCopyButton.addEventListener("click", () => {
+    void copySelectedEmployee();
+  });
+
+  elements.employeeTestSelectedButton.addEventListener("click", () => {
+    void runSelectedEmployeeRoundTripTest();
   });
 
   elements.detailBackButton.addEventListener("click", () => {
@@ -149,6 +196,16 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
   if (panelName === "availability") {
     showDetail(title, subtitle, "availability");
     elements.resultText.textContent = "Ready.";
+    return;
+  }
+
+  if (panelName === "employee-manager") {
+    showDetail(title, subtitle, panelName);
+    await refreshEmployeeApiCredentialStatus();
+    await refreshConfiguredEmployeeTenants();
+    if (employeeItems.length === 0) {
+      await loadEmployees();
+    }
     return;
   }
 
@@ -339,6 +396,448 @@ function selectRadio(radios: HTMLInputElement[], value: string): void {
   });
 }
 
+async function loadEmployees(): Promise<void> {
+  elements.employeeRefreshButton.disabled = true;
+  elements.employeeSummary.textContent = "Loading employees…";
+
+  try {
+    const response = await sendRuntimeMessage<EmployeeListResult>({
+      type: "ac/popup/list-employees",
+      payload: {
+        count: 2000,
+        status: elements.employeeStatusFilter.value
+      }
+    });
+
+    if (!response.ok || !response.data) {
+      throw new Error(response.error ?? "Unable to load employees.");
+    }
+
+    employeeItems = response.data.items;
+    elements.employeeSummary.textContent = `${employeeItems.length} employees loaded from the active tenant.`;
+    renderEmployeeList();
+  } catch (error) {
+    employeeItems = [];
+    elements.employeeList.replaceChildren();
+    elements.employeeSummary.textContent = formatError(error);
+  } finally {
+    elements.employeeRefreshButton.disabled = false;
+  }
+}
+
+function renderEmployeeList(): void {
+  const query = elements.employeeSearchInput.value.trim().toLowerCase();
+  const matches = employeeItems.filter((employee) => {
+    if (!query) {
+      return true;
+    }
+
+    return [
+      employee.id,
+      employee.first_name,
+      employee.last_name,
+      employee.email,
+      employee.status,
+      employee.designation
+    ]
+      .filter((value) => value !== undefined && value !== null)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+
+  const visibleMatches = matches.slice(0, 100);
+  elements.employeeList.replaceChildren(
+    ...visibleMatches.map((employee) => createEmployeeListButton(employee))
+  );
+
+  if (visibleMatches.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "employee-list__empty";
+    empty.textContent = "No employees match the current search and status filter.";
+    elements.employeeList.append(empty);
+  }
+
+  const suffix = matches.length > visibleMatches.length ? ` Showing the first ${visibleMatches.length}.` : "";
+  elements.employeeSummary.textContent = `${matches.length} of ${employeeItems.length} loaded employees match.${suffix}`;
+}
+
+function createEmployeeListButton(employee: EmployeeSummary): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "employee-list__item";
+  button.dataset.employeeId = String(employee.id);
+
+  const name = document.createElement("span");
+  name.className = "employee-list__name";
+  name.textContent = employeeDisplayName(employee);
+
+  const meta = document.createElement("span");
+  meta.className = "employee-list__meta";
+  meta.textContent = `#${employee.id} · ${employee.status ?? "unknown"}${
+    employee.designation ? ` · ${employee.designation}` : ""
+  }`;
+
+  button.append(name, meta);
+  button.addEventListener("click", () => {
+    void loadEmployeeDetail(employee.id);
+  });
+  return button;
+}
+
+async function loadEmployeeDetail(employeeId: number): Promise<void> {
+  elements.employeeDetail.hidden = false;
+  elements.employeeDetailName.textContent = "Loading employee…";
+  elements.employeeDetailMeta.textContent = `#${employeeId}`;
+  elements.employeeDetailFields.replaceChildren();
+
+  try {
+    const response = await sendRuntimeMessage<EmployeeDetail>({
+      type: "ac/popup/get-employee",
+      payload: { employeeId }
+    });
+
+    if (!response.ok || !response.data) {
+      throw new Error(response.error ?? "Unable to load the employee.");
+    }
+
+    selectedEmployee = response.data;
+    renderEmployeeDetail(response.data);
+  } catch (error) {
+    selectedEmployee = null;
+    updateSelectedEmployeeTestAvailability();
+    elements.employeeDetailName.textContent = "Employee unavailable";
+    elements.employeeDetailMeta.textContent = formatError(error);
+  }
+}
+
+function renderEmployeeDetail(employee: EmployeeDetail): void {
+  elements.employeeDetailName.textContent = employeeDisplayName(employee);
+  elements.employeeDetailMeta.textContent = `#${employee.id} · ${employee.status ?? "unknown"}`;
+  elements.employeeNextStatus.value = employee.status ?? "active";
+  elements.employeeStatusComment.value = "";
+  updateSelectedEmployeeTestAvailability();
+  updateEmployeeCopyAvailability();
+
+  const fields: Array<[string, string]> = [
+    ["Email", employee.email ?? employee.demographics?.email ?? "—"],
+    ["Phone", employee.demographics?.phone_main ?? "—"],
+    ["Username", employee.username ?? "—"],
+    ["Payroll number", employee.payroll_number ?? "—"],
+    ["Designation", employee.designation ?? "—"],
+    ["Timezone", employee.timezone ?? "—"],
+    ["Groups", formatReferences(employee.groups)],
+    ["Roles", formatReferences(employee.roles)],
+    ["Departments", formatReferences(employee.departments)],
+    ["Employment type", employee.employment_type?.name ?? String(employee.employment_type?.id ?? "—")]
+  ];
+
+  elements.employeeDetailFields.replaceChildren(
+    ...fields.flatMap(([label, value]) => {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const definition = document.createElement("dd");
+      definition.textContent = value;
+      return [term, definition];
+    })
+  );
+}
+
+async function refreshConfiguredEmployeeTenants(): Promise<void> {
+  try {
+    const response = await sendRuntimeMessage<EmployeeConfiguredTenant[]>({
+      type: "ac/popup/list-employee-configured-tenants"
+    });
+    if (!response.ok || !response.data) {
+      throw new Error(response.error ?? "Unable to list configured tenants.");
+    }
+    configuredEmployeeTenants = response.data;
+    renderEmployeeCopyTargets();
+  } catch (error) {
+    configuredEmployeeTenants = [];
+    elements.employeeCopyTargets.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "employee-list__empty";
+    message.textContent = formatError(error);
+    elements.employeeCopyTargets.append(message);
+    updateEmployeeCopyAvailability();
+  }
+}
+
+function renderEmployeeCopyTargets(): void {
+  const targets = configuredEmployeeTenants.filter(
+    (tenant) => tenant.origin !== currentEmployeeOrigin
+  );
+  elements.employeeCopyTargets.replaceChildren();
+
+  if (targets.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "employee-list__empty";
+    empty.textContent =
+      "No target tenants configured. Open another AlayaCare tenant and save its API keys first.";
+    elements.employeeCopyTargets.append(empty);
+    updateEmployeeCopyAvailability();
+    return;
+  }
+
+  for (const tenant of targets) {
+    const label = document.createElement("label");
+    label.className = "employee-copy-target";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = tenant.origin;
+    checkbox.addEventListener("change", updateEmployeeCopyAvailability);
+    const text = document.createElement("span");
+    text.textContent = `${tenant.origin} · ${tenant.storage === "local" ? "remembered" : "this session"}`;
+    label.append(checkbox, text);
+    elements.employeeCopyTargets.append(label);
+  }
+  updateEmployeeCopyAvailability();
+}
+
+function selectedEmployeeCopyTargets(): string[] {
+  return Array.from(
+    elements.employeeCopyTargets.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')
+  ).map((checkbox) => checkbox.value);
+}
+
+function updateEmployeeCopyAvailability(): void {
+  elements.employeeCopyButton.disabled = !selectedEmployee || selectedEmployeeCopyTargets().length === 0;
+}
+
+async function copySelectedEmployee(): Promise<void> {
+  if (!selectedEmployee) {
+    elements.resultText.textContent = "Select an employee to copy.";
+    return;
+  }
+  const ticket = elements.employeeCopyTicket.value.trim();
+  if (ticket.length < 5) {
+    elements.resultText.textContent = "Enter a ticket number or change reference with at least 5 characters.";
+    return;
+  }
+
+  const targetOrigins = selectedEmployeeCopyTargets();
+  if (targetOrigins.length === 0) {
+    elements.resultText.textContent = "Select at least one target tenant.";
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Copy ${employeeDisplayName(selectedEmployee)} to ${targetOrigins.length} tenant${
+      targetOrigins.length === 1 ? "" : "s"
+    }? This creates new employee records.`
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  elements.employeeCopyButton.disabled = true;
+  try {
+    await withResult(async () => {
+      const response = await sendRuntimeMessage<EmployeeCopyResult>({
+        type: "ac/popup/copy-employee",
+        payload: { employee: selectedEmployee!, targetOrigins, ticket }
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to copy the employee.");
+      }
+      return response.data.results
+        .map((result) =>
+          result.ok
+            ? `${result.origin}: created employee #${result.employeeId}; note HTTP ${result.noteStatus}`
+            : `${result.origin}: not created — ${result.error}`
+        )
+        .join("\n");
+    });
+  } finally {
+    updateEmployeeCopyAvailability();
+  }
+}
+
+async function updateSelectedEmployeeStatus(): Promise<void> {
+  if (!selectedEmployee) {
+    elements.resultText.textContent = "Select an employee before updating status.";
+    return;
+  }
+
+  const employeeId = selectedEmployee.id;
+  const comment = elements.employeeStatusComment.value.trim();
+  if (!comment) {
+    elements.resultText.textContent = "Enter a ticket or reason so the change has an audit note.";
+    return;
+  }
+
+  elements.employeeUpdateStatusButton.disabled = true;
+  try {
+    await withResult(async () => {
+      const result = await sendEmployeeStatusUpdate(
+        employeeId,
+        elements.employeeNextStatus.value,
+        comment
+      );
+
+      await loadEmployees();
+      await loadEmployeeDetail(employeeId);
+      return `Employee #${employeeId} status updated (HTTP ${result.status}); audit note HTTP ${result.noteStatus ?? "not requested"}.`;
+    });
+  } finally {
+    elements.employeeUpdateStatusButton.disabled = false;
+  }
+}
+
+async function runSelectedEmployeeRoundTripTest(): Promise<void> {
+  if (!selectedEmployee) {
+    elements.resultText.textContent = "Select the existing UAT test employee first.";
+    return;
+  }
+
+  const employee = selectedEmployee;
+  const displayName = employeeDisplayName(employee);
+  if (!isUatTenant || !/(test|do\s*not\s*send)/i.test(displayName)) {
+    elements.resultText.textContent = "The selected employee must be clearly marked Test on a UAT tenant.";
+    return;
+  }
+  if (employee.status !== "active") {
+    elements.resultText.textContent = "The round-trip test expects the selected test employee to start active.";
+    return;
+  }
+
+  elements.employeeTestSelectedButton.disabled = true;
+  try {
+    await withResult(async () => {
+      const suspended = await sendEmployeeStatusUpdate(
+        employee.id,
+        "suspended",
+        "AC Tools UAT extension round-trip test; restoring active immediately."
+      );
+      const restored = await sendEmployeeStatusUpdate(
+        employee.id,
+        "active",
+        "AC Tools UAT extension round-trip test completed; original active status restored."
+      );
+
+      await loadEmployees();
+      await loadEmployeeDetail(employee.id);
+      return [
+        `Employee #${employee.id} (${displayName}) completed active → suspended → active.`,
+        `Suspend HTTP ${suspended.status}, note HTTP ${suspended.noteStatus}; restore HTTP ${restored.status}, note HTTP ${restored.noteStatus}.`,
+        "Original active status restored."
+      ].join("\n");
+    });
+  } finally {
+    updateSelectedEmployeeTestAvailability();
+  }
+}
+
+async function sendEmployeeStatusUpdate(
+  employeeId: number,
+  status: string,
+  comment: string
+): Promise<EmployeeWriteResult> {
+  const response = await sendRuntimeMessage<EmployeeWriteResult>({
+    type: "ac/popup/update-employee-status",
+    payload: { employeeId, status, comment }
+  });
+
+  if (!response.ok || !response.data) {
+    throw new Error(response.error ?? "Unable to update employee status.");
+  }
+  return response.data;
+}
+
+async function refreshEmployeeApiCredentialStatus(): Promise<void> {
+  try {
+    const response = await sendRuntimeMessage<EmployeeApiCredentialStatus>({
+      type: "ac/popup/get-employee-api-credential-status"
+    });
+    if (!response.ok || !response.data) {
+      throw new Error(response.error ?? "Unable to inspect API credential status.");
+    }
+    applyEmployeeApiCredentialStatus(response.data);
+  } catch (error) {
+    employeeApiCredentialsConfigured = false;
+    elements.employeeApiCredentialStatus.textContent = formatError(error);
+    updateSelectedEmployeeTestAvailability();
+  }
+}
+
+async function saveEmployeeApiCredentials(): Promise<void> {
+  elements.employeeApiSaveButton.disabled = true;
+  try {
+    const response = await sendRuntimeMessage<EmployeeApiCredentialStatus>({
+      type: "ac/popup/set-employee-api-credentials",
+      payload: {
+        publicKey: elements.employeeApiPublicKey.value,
+        privateKey: elements.employeeApiPrivateKey.value,
+        remember: elements.employeeApiRemember.checked
+      }
+    });
+    if (!response.ok || !response.data) {
+      throw new Error(response.error ?? "Unable to configure API credentials.");
+    }
+    elements.employeeApiPublicKey.value = "";
+    elements.employeeApiPrivateKey.value = "";
+    applyEmployeeApiCredentialStatus(response.data);
+    await refreshConfiguredEmployeeTenants();
+    elements.resultText.textContent = response.data.storage === "local"
+      ? "API credentials were validated and remembered in this Chrome profile."
+      : "API credentials were validated and are available for this Chrome session only.";
+  } catch (error) {
+    elements.resultText.textContent = formatError(error);
+  } finally {
+    elements.employeeApiSaveButton.disabled = false;
+  }
+}
+
+async function clearEmployeeApiCredentials(): Promise<void> {
+  const response = await sendRuntimeMessage<EmployeeApiCredentialStatus>({
+    type: "ac/popup/clear-employee-api-credentials"
+  });
+  if (!response.ok || !response.data) {
+    elements.resultText.textContent = response.error ?? "Unable to clear API credentials.";
+    return;
+  }
+  applyEmployeeApiCredentialStatus(response.data);
+  elements.employeeApiRemember.checked = false;
+  await refreshConfiguredEmployeeTenants();
+  elements.resultText.textContent = "API credentials cleared from session and device storage.";
+}
+
+function applyEmployeeApiCredentialStatus(status: EmployeeApiCredentialStatus): void {
+  employeeApiCredentialsConfigured = status.configured;
+  currentEmployeeOrigin = status.origin;
+  elements.employeeApiRemember.checked = status.storage === "local";
+  elements.employeeApiCredentialStatus.textContent = status.configured
+    ? `${status.storage === "local" ? "Remembered on this device" : "Configured for this session"} for ${status.origin}`
+    : `Not configured for ${status.origin}`;
+  elements.employeeApiClearButton.disabled = !status.configured;
+  updateSelectedEmployeeTestAvailability();
+}
+
+function updateSelectedEmployeeTestAvailability(): void {
+  const name = selectedEmployee ? employeeDisplayName(selectedEmployee) : "";
+  elements.employeeTestSelectedButton.disabled = !(
+    employeeApiCredentialsConfigured &&
+    isUatTenant &&
+    selectedEmployee?.status === "active" &&
+    /(test|do\s*not\s*send)/i.test(name)
+  );
+}
+
+function employeeDisplayName(employee: EmployeeSummary | EmployeeDetail): string {
+  const demographics = "demographics" in employee ? employee.demographics : undefined;
+  const firstName = employee.first_name ?? demographics?.first_name ?? "";
+  const lastName = employee.last_name ?? demographics?.last_name ?? "";
+  return [firstName, lastName].filter(Boolean).join(" ").trim() || `Employee #${employee.id}`;
+}
+
+function formatReferences(references: EmployeeDetail["groups"]): string {
+  if (!references || references.length === 0) {
+    return "—";
+  }
+  return references.map((reference) => reference.name ?? String(reference.id)).join(", ");
+}
+
 interface PopupElements {
   form: HTMLFormElement;
   statusText: HTMLElement;
@@ -363,6 +862,28 @@ interface PopupElements {
   surfaceHint: HTMLElement;
   catalogJsonExportButton: HTMLButtonElement;
   catalogCsvExportButton: HTMLButtonElement;
+  employeeSearchInput: HTMLInputElement;
+  employeeStatusFilter: HTMLSelectElement;
+  employeeRefreshButton: HTMLButtonElement;
+  employeeSummary: HTMLElement;
+  employeeList: HTMLElement;
+  employeeDetail: HTMLElement;
+  employeeDetailName: HTMLElement;
+  employeeDetailMeta: HTMLElement;
+  employeeDetailFields: HTMLElement;
+  employeeNextStatus: HTMLSelectElement;
+  employeeStatusComment: HTMLInputElement;
+  employeeUpdateStatusButton: HTMLButtonElement;
+  employeeApiCredentialStatus: HTMLElement;
+  employeeApiPublicKey: HTMLInputElement;
+  employeeApiPrivateKey: HTMLInputElement;
+  employeeApiRemember: HTMLInputElement;
+  employeeApiSaveButton: HTMLButtonElement;
+  employeeApiClearButton: HTMLButtonElement;
+  employeeTestSelectedButton: HTMLButtonElement;
+  employeeCopyTicket: HTMLInputElement;
+  employeeCopyTargets: HTMLElement;
+  employeeCopyButton: HTMLButtonElement;
 }
 
 function getPopupElements(): PopupElements {
@@ -389,6 +910,38 @@ function getPopupElements(): PopupElements {
   const catalogCsvExportButton = document.querySelector<HTMLButtonElement>(
     "#export-form-context-catalog-csv"
   );
+  const employeeSearchInput = document.querySelector<HTMLInputElement>("#employee-search");
+  const employeeStatusFilter = document.querySelector<HTMLSelectElement>(
+    "#employee-status-filter"
+  );
+  const employeeRefreshButton = document.querySelector<HTMLButtonElement>("#employee-refresh");
+  const employeeSummary = document.querySelector<HTMLElement>("#employee-summary");
+  const employeeList = document.querySelector<HTMLElement>("#employee-list");
+  const employeeDetail = document.querySelector<HTMLElement>("#employee-detail");
+  const employeeDetailName = document.querySelector<HTMLElement>("#employee-detail-name");
+  const employeeDetailMeta = document.querySelector<HTMLElement>("#employee-detail-meta");
+  const employeeDetailFields = document.querySelector<HTMLElement>("#employee-detail-fields");
+  const employeeNextStatus = document.querySelector<HTMLSelectElement>("#employee-next-status");
+  const employeeStatusComment = document.querySelector<HTMLInputElement>(
+    "#employee-status-comment"
+  );
+  const employeeUpdateStatusButton = document.querySelector<HTMLButtonElement>(
+    "#employee-update-status"
+  );
+  const employeeApiCredentialStatus = document.querySelector<HTMLElement>(
+    "#employee-api-credential-status"
+  );
+  const employeeApiPublicKey = document.querySelector<HTMLInputElement>("#employee-api-public-key");
+  const employeeApiPrivateKey = document.querySelector<HTMLInputElement>("#employee-api-private-key");
+  const employeeApiRemember = document.querySelector<HTMLInputElement>("#employee-api-remember");
+  const employeeApiSaveButton = document.querySelector<HTMLButtonElement>("#employee-api-save");
+  const employeeApiClearButton = document.querySelector<HTMLButtonElement>("#employee-api-clear");
+  const employeeTestSelectedButton = document.querySelector<HTMLButtonElement>(
+    "#employee-test-selected"
+  );
+  const employeeCopyTicket = document.querySelector<HTMLInputElement>("#employee-copy-ticket");
+  const employeeCopyTargets = document.querySelector<HTMLElement>("#employee-copy-targets");
+  const employeeCopyButton = document.querySelector<HTMLButtonElement>("#employee-copy");
   const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-tile"));
   const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".tool-panel"));
   const toolPanels = new Map(
@@ -421,6 +974,28 @@ function getPopupElements(): PopupElements {
     !surfaceHint ||
     !catalogJsonExportButton ||
     !catalogCsvExportButton ||
+    !employeeSearchInput ||
+    !employeeStatusFilter ||
+    !employeeRefreshButton ||
+    !employeeSummary ||
+    !employeeList ||
+    !employeeDetail ||
+    !employeeDetailName ||
+    !employeeDetailMeta ||
+    !employeeDetailFields ||
+    !employeeNextStatus ||
+    !employeeStatusComment ||
+    !employeeUpdateStatusButton ||
+    !employeeApiCredentialStatus ||
+    !employeeApiPublicKey ||
+    !employeeApiPrivateKey ||
+    !employeeApiRemember ||
+    !employeeApiSaveButton ||
+    !employeeApiClearButton ||
+    !employeeTestSelectedButton ||
+    !employeeCopyTicket ||
+    !employeeCopyTargets ||
+    !employeeCopyButton ||
     toolTiles.length === 0 ||
     toolPanels.size === 0 ||
     surfaceRadios.length === 0 ||
@@ -452,7 +1027,29 @@ function getPopupElements(): PopupElements {
     themeRadios,
     surfaceHint,
     catalogJsonExportButton,
-    catalogCsvExportButton
+    catalogCsvExportButton,
+    employeeSearchInput,
+    employeeStatusFilter,
+    employeeRefreshButton,
+    employeeSummary,
+    employeeList,
+    employeeDetail,
+    employeeDetailName,
+    employeeDetailMeta,
+    employeeDetailFields,
+    employeeNextStatus,
+    employeeStatusComment,
+    employeeUpdateStatusButton,
+    employeeApiCredentialStatus,
+    employeeApiPublicKey,
+    employeeApiPrivateKey,
+    employeeApiRemember,
+    employeeApiSaveButton,
+    employeeApiClearButton,
+    employeeTestSelectedButton,
+    employeeCopyTicket,
+    employeeCopyTargets,
+    employeeCopyButton
   };
 }
 
@@ -541,8 +1138,12 @@ async function refreshStatus(): Promise<void> {
     }
 
     elements.statusText.textContent = buildStatusText(response.data);
+    isUatTenant = response.data.ready && response.data.location.includes(".uat.alayacare.");
+    updateSelectedEmployeeTestAvailability();
   } catch (error) {
     elements.statusText.textContent = formatError(error);
+    isUatTenant = false;
+    updateSelectedEmployeeTestAvailability();
   }
 }
 
