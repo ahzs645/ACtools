@@ -127,6 +127,46 @@
               type="button"
               class="app-tile"
               role="listitem"
+              data-tool-panel="environment-manager"
+              data-tool-id="environment-manager"
+              data-tool-title="Environments"
+              data-tool-subtitle="Manage tenants, credentials, defaults, and API health."
+              data-search-terms="environment tenant credentials api keys health import export default"
+              data-status="ready"
+            >
+              <span class="app-tile__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+                </svg>
+              </span>
+              <span class="app-tile__label">Environments</span>
+              <span class="app-tile__badge">New</span>
+            </button>
+
+            <button
+              type="button"
+              class="app-tile"
+              role="listitem"
+              data-tool-panel="about"
+              data-tool-id="about"
+              data-tool-title="About AC Tools"
+              data-tool-subtitle="Version details and recent changes."
+              data-search-terms="about version changelog release notes"
+              data-status="ready"
+            >
+              <span class="app-tile__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" />
+                </svg>
+              </span>
+              <span class="app-tile__label">About</span>
+            </button>
+
+            <button
+              type="button"
+              class="app-tile"
+              role="listitem"
               data-tool-panel="availability"
               data-tool-id="availability"
               data-tool-title="Availability Test"
@@ -481,6 +521,18 @@
               </button>
             </div>
 
+            <div class="employee-sort-bar">
+              <label class="field__label" for="employee-sort">Sort by</label>
+              <select id="employee-sort" class="input">
+                <option value="last_name">Last name</option>
+                <option value="first_name">First name</option>
+                <option value="id">Employee ID</option>
+                <option value="status">Status</option>
+                <option value="email">Email</option>
+              </select>
+              <button id="employee-sort-direction" type="button" class="button button--subtle" aria-label="Reverse employee sort">Ascending ↑</button>
+            </div>
+
             <p id="employee-summary" class="employee-summary">Open the tool to load employees.</p>
             <div id="employee-list" class="employee-list" aria-live="polite"></div>
 
@@ -532,9 +584,10 @@
                   aria-label="Copy employee ticket number"
                 />
                 <div id="employee-copy-targets" class="employee-copy-targets"></div>
-                <button id="employee-copy" type="button" class="button button--secondary" disabled>
-                  Copy selected employee
-                </button>
+                <button id="employee-copy-preview" type="button" class="button button--secondary" disabled>Preview mappings</button>
+                <div id="employee-copy-plan" class="employee-copy-plan"></div>
+                <button id="employee-copy" type="button" class="button button--primary" disabled>Create employee copies</button>
+                <div id="employee-copy-progress" class="employee-copy-progress"></div>
               </div>
             </section>
 
@@ -571,6 +624,66 @@
               <button id="employee-test-selected" type="button" class="button button--secondary" disabled>
                 Test selected employee
               </button>
+            </section>
+          </div>
+
+          <div id="panel-environment-manager" class="tool-panel">
+            <section class="environment-section">
+              <div class="section-heading-row">
+                <div>
+                  <h3>Configured environments</h3>
+                  <p class="employee-summary">Names, URLs, defaults, and support links are local non-secret configuration.</p>
+                </div>
+                <div class="environment-toolbar">
+                  <button id="environment-import" type="button" class="button button--secondary">Import</button>
+                  <button id="environment-export" type="button" class="button button--secondary">Export</button>
+                  <input id="environment-import-input" type="file" accept="application/json,.json" hidden />
+                </div>
+              </div>
+              <div id="environment-list" class="environment-list"></div>
+            </section>
+
+            <section class="environment-section environment-form">
+              <h3>Add or edit environment</h3>
+              <input id="environment-name" class="input" type="text" placeholder="Friendly name, e.g. Northern Health UAT" />
+              <input id="environment-origin" class="input" type="url" placeholder="https://tenant.uat.alayacare.ca" />
+              <input id="environment-support-url" class="input" type="url" value="https://healthbc.service-now.com/" placeholder="ServiceNow support URL" />
+              <div class="environment-toolbar">
+                <button id="environment-save" type="button" class="button button--primary">Save environment</button>
+                <button id="environment-reset" type="button" class="button button--subtle">Clear form</button>
+              </div>
+            </section>
+
+            <section class="environment-section environment-form">
+              <h3>API credentials</h3>
+              <p class="employee-summary">Credentials are stored separately and are never included in environment exports.</p>
+              <select id="environment-credential-origin" class="input"></select>
+              <input id="environment-public-key" class="input" type="text" autocomplete="off" placeholder="Public key" />
+              <input id="environment-private-key" class="input" type="password" autocomplete="new-password" placeholder="Private key" />
+              <label class="employee-remember-option">
+                <input id="environment-remember" type="checkbox" />
+                <span><strong>Remember on this device</strong><small>Otherwise kept in memory for this Chrome session.</small></span>
+              </label>
+              <p id="environment-credential-status" class="employee-summary">Choose an environment.</p>
+              <div class="environment-toolbar">
+                <button id="environment-credential-save" type="button" class="button button--primary">Validate and save</button>
+                <button id="environment-credential-clear" type="button" class="button button--subtle">Clear credentials</button>
+              </div>
+            </section>
+          </div>
+
+          <div id="panel-about" class="tool-panel">
+            <section class="about-card">
+              <h3>AC Tools <span id="extension-version"></span></h3>
+              <p>Chrome-native AlayaCare utilities with tenant-scoped credentials and guarded write workflows.</p>
+              <h4>Recent changes</h4>
+              <ul class="changelog-list">
+                <li>Environment registry, import/export, default tenant, and endpoint health checks</li>
+                <li>Employee-copy dry run, duplicate detection, manual mappings, and per-tenant progress</li>
+                <li>Session employee cache, configurable sorting, statuses, and timezone defaults</li>
+                <li>Optional device-local credentials, richer notifications, and ServiceNow shortcuts</li>
+                <li>Employee search, details, status updates, audit notes, and guarded UAT testing</li>
+              </ul>
             </section>
           </div>
 
@@ -669,6 +782,20 @@
                 </label>
               </div>
             </div>
+
+            <div class="settings-section">
+              <span class="section-label">Employee defaults</span>
+              <div class="settings-form">
+                <label class="field__label" for="default-timezone">Default timezone</label>
+                <input id="default-timezone" class="input" type="text" placeholder="America/Vancouver" />
+                <label class="field__label" for="employee-statuses">Employee statuses, one per line</label>
+                <textarea id="employee-statuses" class="input" rows="7"></textarea>
+                <div class="environment-toolbar">
+                  <button id="preferences-save" type="button" class="button button--primary">Save defaults</button>
+                  <button id="preferences-reset" type="button" class="button button--subtle">Reset defaults</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div id="result-container" class="result">
@@ -678,6 +805,8 @@
         </div>
       </section>
     </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 
     <script type="module" src="/src/popup/main.ts"></script>
   </body>

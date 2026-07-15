@@ -20,9 +20,12 @@ To update later, download the next release zip, replace the folder contents, and
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
 - `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON or a reviewed CSV table
-- `Employee Manager` for authenticated employee search, details, status updates, audit notes, and guarded cross-tenant employee copying with name-based access mapping
+- `Employee Manager` for authenticated employee search, session caching, configurable sorting, details, status updates, audit notes, and guarded cross-tenant employee copying
+- copy dry runs with duplicate detection, automatic and manual group/role/department/employment-type mappings, ServiceNow shortcuts, and per-tenant execution progress
+- `Environment Manager` for friendly tenant names, add/edit/delete, a default tenant, non-secret import/export, per-tenant credential setup, and authentication/metadata health checks
 - validated external API credentials that default to memory-only session storage, with an explicit opt-in to remember keys locally in the current Chrome profile; credentials are never synced or embedded in the extension
 - a UAT round-trip test that operates only on a selected employee clearly marked as a test record
+- configurable employee status choices and default timezone, plus an in-extension changelog and toast notifications
 - automatic `AC Tools` page button injection beside `.global-search`
 - planned slots in the drawer for shift swap, save/restore, PDF export, and rotation tooling
 
@@ -53,8 +56,12 @@ Everything below is for people working on the extension itself. End users should
 ```text
 public/manifest.json      Chrome extension manifest
 src/background/           MV3 service worker
+src/background/employees/ Credential storage and external employee/copy/health services
+src/background/environments/ Non-secret environment registry storage
 src/content/              content script, overlay, page integration, AlayaCare API client
-src/popup/                shared drawer UI code used by the side panel page
+src/popup/features/       Modular environment, employee copy/cache/sort, and preferences controllers
+src/popup/ui/             Shared side-panel UI helpers such as toast notifications
+src/popup/                shared drawer UI entry point used by the side panel page
 src/shared/               typed messages and shared helpers
 scripts/build.mjs         build orchestration for popup/background/content
 scripts/package.mjs       version sync, build, and release zip

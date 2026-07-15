@@ -7,12 +7,22 @@ import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
-  EmployeeCopyResult,
   EmployeeDetail,
   EmployeeListResult,
   EmployeeSummary,
   EmployeeWriteResult
 } from "../shared/employees";
+import type { AppPreferences } from "../shared/environments";
+import { EnvironmentManagerController } from "./features/environments/controller";
+import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
+import { EmployeeCopyController } from "./features/employees/copyController";
+import {
+  type EmployeeSortField,
+  type SortDirection,
+  sortEmployees
+} from "./features/employees/sort";
+import { loadAppPreferences, resetAppPreferences, saveAppPreferences } from "./features/preferences";
+import { showToast } from "./ui/toasts";
 import {
   DEFAULT_SURFACE,
   POPUP_FORM_STORAGE_KEY,
@@ -48,16 +58,36 @@ let employeeApiCredentialsConfigured = false;
 let isUatTenant = false;
 let currentEmployeeOrigin = "";
 let configuredEmployeeTenants: EmployeeConfiguredTenant[] = [];
+let employeeSortField: EmployeeSortField = "last_name";
+let employeeSortDirection: SortDirection = "asc";
+let appPreferences!: AppPreferences;
 
 const elements = getPopupElements();
+const environmentManager = new EnvironmentManagerController(async () => {
+  await refreshConfiguredEmployeeTenants();
+});
+const employeeCopyController = new EmployeeCopyController({
+  getEmployee: () => selectedEmployee
+    ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }
+    : null,
+  getEmployeeName: employeeDisplayName,
+  getCurrentOrigin: () => currentEmployeeOrigin,
+  getSupportUrl: (origin) => environmentManager.getSupportUrl(origin),
+  getEnvironmentName: (origin) => environmentManager.getEnvironmentName(origin)
+});
 
 void init();
 
 async function init(): Promise<void> {
+  appPreferences = await loadAppPreferences();
   await applyStoredTheme();
   await applyStoredSurfaceSelection();
+  applyEmployeePreferences();
   await hydrateForm();
   await refreshStatus();
+  await environmentManager.init();
+  employeeCopyController.init();
+  elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
 
   elements.themeToggle.addEventListener("click", () => {
     void toggleTheme();
@@ -80,7 +110,7 @@ async function init(): Promise<void> {
   });
 
   elements.employeeRefreshButton.addEventListener("click", () => {
-    void loadEmployees();
+    void loadEmployees(true);
   });
 
   elements.employeeSearchInput.addEventListener("input", () => {
@@ -89,6 +119,17 @@ async function init(): Promise<void> {
 
   elements.employeeStatusFilter.addEventListener("change", () => {
     void loadEmployees();
+  });
+
+  elements.employeeSort.addEventListener("change", () => {
+    employeeSortField = elements.employeeSort.value as EmployeeSortField;
+    renderEmployeeList();
+  });
+
+  elements.employeeSortDirection.addEventListener("click", () => {
+    employeeSortDirection = employeeSortDirection === "asc" ? "desc" : "asc";
+    elements.employeeSortDirection.textContent = employeeSortDirection === "asc" ? "Ascending ↑" : "Descending ↓";
+    renderEmployeeList();
   });
 
   elements.employeeUpdateStatusButton.addEventListener("click", () => {
@@ -103,13 +144,12 @@ async function init(): Promise<void> {
     void clearEmployeeApiCredentials();
   });
 
-  elements.employeeCopyButton.addEventListener("click", () => {
-    void copySelectedEmployee();
-  });
-
   elements.employeeTestSelectedButton.addEventListener("click", () => {
     void runSelectedEmployeeRoundTripTest();
   });
+
+  elements.preferencesSave.addEventListener("click", () => void savePreferencesFromUi());
+  elements.preferencesReset.addEventListener("click", () => void resetPreferencesUi());
 
   elements.detailBackButton.addEventListener("click", () => {
     showLauncher();
@@ -204,8 +244,14 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
     await refreshEmployeeApiCredentialStatus();
     await refreshConfiguredEmployeeTenants();
     if (employeeItems.length === 0) {
-      await loadEmployees();
+      await loadEmployees(true);
     }
+    return;
+  }
+
+  if (panelName === "environment-manager") {
+    showDetail(title, subtitle, panelName);
+    await environmentManager.refresh();
     return;
   }
 
@@ -396,16 +442,83 @@ function selectRadio(radios: HTMLInputElement[], value: string): void {
   });
 }
 
-async function loadEmployees(): Promise<void> {
+function applyEmployeePreferences(): void {
+  elements.defaultTimezone.value = appPreferences.defaultTimezone;
+  elements.employeeStatuses.value = appPreferences.employeeStatuses.join("\n");
+  replaceStatusOptions(elements.employeeStatusFilter, appPreferences.employeeStatuses, true);
+  replaceStatusOptions(elements.employeeNextStatus, appPreferences.employeeStatuses, false);
+}
+
+function replaceStatusOptions(
+  select: HTMLSelectElement,
+  statuses: string[],
+  includeAll: boolean
+): void {
+  const current = select.value;
+  const options = statuses.map((status) => {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return option;
+  });
+  if (includeAll) {
+    const all = document.createElement("option");
+    all.value = "all";
+    all.textContent = "All statuses";
+    options.push(all);
+  }
+  select.replaceChildren(...options);
+  if (Array.from(select.options).some((option) => option.value === current)) {
+    select.value = current;
+  } else if (includeAll && current === "all") {
+    select.value = "all";
+  }
+}
+
+async function savePreferencesFromUi(): Promise<void> {
+  const timezone = elements.defaultTimezone.value.trim();
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+  } catch {
+    showToast("error", "Invalid timezone", "Enter an IANA timezone such as America/Vancouver.");
+    return;
+  }
+  appPreferences = await saveAppPreferences({
+    defaultTimezone: timezone,
+    employeeStatuses: elements.employeeStatuses.value.split(/\r?\n/)
+  });
+  applyEmployeePreferences();
+  showToast("success", "Employee defaults saved", "Timezone and status options were updated.");
+}
+
+async function resetPreferencesUi(): Promise<void> {
+  appPreferences = await resetAppPreferences();
+  applyEmployeePreferences();
+  showToast("info", "Employee defaults reset", "Built-in defaults were restored.");
+}
+
+async function loadEmployees(forceRefresh = false): Promise<void> {
   elements.employeeRefreshButton.disabled = true;
   elements.employeeSummary.textContent = "Loading employees…";
 
   try {
+    const status = elements.employeeStatusFilter.value;
+    if (forceRefresh) {
+      await clearEmployeeCaches(currentEmployeeOrigin);
+    } else {
+      const cached = await loadCachedEmployees(currentEmployeeOrigin, status);
+      if (cached) {
+        employeeItems = cached.items;
+        renderEmployeeList();
+        elements.employeeSummary.textContent = `${employeeItems.length} employees restored from this session's cache.`;
+        return;
+      }
+    }
     const response = await sendRuntimeMessage<EmployeeListResult>({
       type: "ac/popup/list-employees",
       payload: {
         count: 2000,
-        status: elements.employeeStatusFilter.value
+        status
       }
     });
 
@@ -414,12 +527,14 @@ async function loadEmployees(): Promise<void> {
     }
 
     employeeItems = response.data.items;
+    await cacheEmployees(currentEmployeeOrigin, status, response.data);
     elements.employeeSummary.textContent = `${employeeItems.length} employees loaded from the active tenant.`;
     renderEmployeeList();
   } catch (error) {
     employeeItems = [];
     elements.employeeList.replaceChildren();
     elements.employeeSummary.textContent = formatError(error);
+    showToast("error", "Employees not loaded", formatError(error));
   } finally {
     elements.employeeRefreshButton.disabled = false;
   }
@@ -446,7 +561,8 @@ function renderEmployeeList(): void {
       .includes(query);
   });
 
-  const visibleMatches = matches.slice(0, 100);
+  const sortedMatches = sortEmployees(matches, employeeSortField, employeeSortDirection);
+  const visibleMatches = sortedMatches.slice(0, 100);
   elements.employeeList.replaceChildren(
     ...visibleMatches.map((employee) => createEmployeeListButton(employee))
   );
@@ -458,7 +574,7 @@ function renderEmployeeList(): void {
     elements.employeeList.append(empty);
   }
 
-  const suffix = matches.length > visibleMatches.length ? ` Showing the first ${visibleMatches.length}.` : "";
+  const suffix = sortedMatches.length > visibleMatches.length ? ` Showing the first ${visibleMatches.length}.` : "";
   elements.employeeSummary.textContent = `${matches.length} of ${employeeItems.length} loaded employees match.${suffix}`;
 }
 
@@ -506,18 +622,26 @@ async function loadEmployeeDetail(employeeId: number): Promise<void> {
   } catch (error) {
     selectedEmployee = null;
     updateSelectedEmployeeTestAvailability();
+    employeeCopyController.selectedEmployeeChanged();
     elements.employeeDetailName.textContent = "Employee unavailable";
     elements.employeeDetailMeta.textContent = formatError(error);
+    showToast("error", "Employee details unavailable", formatError(error));
   }
 }
 
 function renderEmployeeDetail(employee: EmployeeDetail): void {
   elements.employeeDetailName.textContent = employeeDisplayName(employee);
   elements.employeeDetailMeta.textContent = `#${employee.id} · ${employee.status ?? "unknown"}`;
+  if (employee.status && !Array.from(elements.employeeNextStatus.options).some((option) => option.value === employee.status)) {
+    const option = document.createElement("option");
+    option.value = employee.status;
+    option.textContent = employee.status.replace(/_/g, " ");
+    elements.employeeNextStatus.append(option);
+  }
   elements.employeeNextStatus.value = employee.status ?? "active";
   elements.employeeStatusComment.value = "";
   updateSelectedEmployeeTestAvailability();
-  updateEmployeeCopyAvailability();
+  employeeCopyController.selectedEmployeeChanged();
 
   const fields: Array<[string, string]> = [
     ["Email", employee.email ?? employee.demographics?.email ?? "—"],
@@ -552,7 +676,7 @@ async function refreshConfiguredEmployeeTenants(): Promise<void> {
       throw new Error(response.error ?? "Unable to list configured tenants.");
     }
     configuredEmployeeTenants = response.data;
-    renderEmployeeCopyTargets();
+    employeeCopyController.renderTargets(configuredEmployeeTenants, currentEmployeeOrigin);
   } catch (error) {
     configuredEmployeeTenants = [];
     elements.employeeCopyTargets.replaceChildren();
@@ -560,97 +684,7 @@ async function refreshConfiguredEmployeeTenants(): Promise<void> {
     message.className = "employee-list__empty";
     message.textContent = formatError(error);
     elements.employeeCopyTargets.append(message);
-    updateEmployeeCopyAvailability();
-  }
-}
-
-function renderEmployeeCopyTargets(): void {
-  const targets = configuredEmployeeTenants.filter(
-    (tenant) => tenant.origin !== currentEmployeeOrigin
-  );
-  elements.employeeCopyTargets.replaceChildren();
-
-  if (targets.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "employee-list__empty";
-    empty.textContent =
-      "No target tenants configured. Open another AlayaCare tenant and save its API keys first.";
-    elements.employeeCopyTargets.append(empty);
-    updateEmployeeCopyAvailability();
-    return;
-  }
-
-  for (const tenant of targets) {
-    const label = document.createElement("label");
-    label.className = "employee-copy-target";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = tenant.origin;
-    checkbox.addEventListener("change", updateEmployeeCopyAvailability);
-    const text = document.createElement("span");
-    text.textContent = `${tenant.origin} · ${tenant.storage === "local" ? "remembered" : "this session"}`;
-    label.append(checkbox, text);
-    elements.employeeCopyTargets.append(label);
-  }
-  updateEmployeeCopyAvailability();
-}
-
-function selectedEmployeeCopyTargets(): string[] {
-  return Array.from(
-    elements.employeeCopyTargets.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')
-  ).map((checkbox) => checkbox.value);
-}
-
-function updateEmployeeCopyAvailability(): void {
-  elements.employeeCopyButton.disabled = !selectedEmployee || selectedEmployeeCopyTargets().length === 0;
-}
-
-async function copySelectedEmployee(): Promise<void> {
-  if (!selectedEmployee) {
-    elements.resultText.textContent = "Select an employee to copy.";
-    return;
-  }
-  const ticket = elements.employeeCopyTicket.value.trim();
-  if (ticket.length < 5) {
-    elements.resultText.textContent = "Enter a ticket number or change reference with at least 5 characters.";
-    return;
-  }
-
-  const targetOrigins = selectedEmployeeCopyTargets();
-  if (targetOrigins.length === 0) {
-    elements.resultText.textContent = "Select at least one target tenant.";
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Copy ${employeeDisplayName(selectedEmployee)} to ${targetOrigins.length} tenant${
-      targetOrigins.length === 1 ? "" : "s"
-    }? This creates new employee records.`
-  );
-  if (!confirmed) {
-    return;
-  }
-
-  elements.employeeCopyButton.disabled = true;
-  try {
-    await withResult(async () => {
-      const response = await sendRuntimeMessage<EmployeeCopyResult>({
-        type: "ac/popup/copy-employee",
-        payload: { employee: selectedEmployee!, targetOrigins, ticket }
-      });
-      if (!response.ok || !response.data) {
-        throw new Error(response.error ?? "Unable to copy the employee.");
-      }
-      return response.data.results
-        .map((result) =>
-          result.ok
-            ? `${result.origin}: created employee #${result.employeeId}; note HTTP ${result.noteStatus}`
-            : `${result.origin}: not created — ${result.error}`
-        )
-        .join("\n");
-    });
-  } finally {
-    updateEmployeeCopyAvailability();
+    employeeCopyController.renderTargets([], currentEmployeeOrigin);
   }
 }
 
@@ -676,7 +710,7 @@ async function updateSelectedEmployeeStatus(): Promise<void> {
         comment
       );
 
-      await loadEmployees();
+      await loadEmployees(true);
       await loadEmployeeDetail(employeeId);
       return `Employee #${employeeId} status updated (HTTP ${result.status}); audit note HTTP ${result.noteStatus ?? "not requested"}.`;
     });
@@ -716,7 +750,7 @@ async function runSelectedEmployeeRoundTripTest(): Promise<void> {
         "AC Tools UAT extension round-trip test completed; original active status restored."
       );
 
-      await loadEmployees();
+      await loadEmployees(true);
       await loadEmployeeDetail(employee.id);
       return [
         `Employee #${employee.id} (${displayName}) completed active → suspended → active.`,
@@ -778,12 +812,15 @@ async function saveEmployeeApiCredentials(): Promise<void> {
     elements.employeeApiPublicKey.value = "";
     elements.employeeApiPrivateKey.value = "";
     applyEmployeeApiCredentialStatus(response.data);
+    await environmentManager.refresh();
     await refreshConfiguredEmployeeTenants();
     elements.resultText.textContent = response.data.storage === "local"
       ? "API credentials were validated and remembered in this Chrome profile."
       : "API credentials were validated and are available for this Chrome session only.";
+    showToast("success", "Credentials validated", elements.resultText.textContent);
   } catch (error) {
     elements.resultText.textContent = formatError(error);
+    showToast("error", "Credentials rejected", formatError(error));
   } finally {
     elements.employeeApiSaveButton.disabled = false;
   }
@@ -797,10 +834,12 @@ async function clearEmployeeApiCredentials(): Promise<void> {
     elements.resultText.textContent = response.error ?? "Unable to clear API credentials.";
     return;
   }
+  await clearEmployeeCaches(response.data.origin);
   applyEmployeeApiCredentialStatus(response.data);
   elements.employeeApiRemember.checked = false;
   await refreshConfiguredEmployeeTenants();
   elements.resultText.textContent = "API credentials cleared from session and device storage.";
+  showToast("info", "Credentials cleared", `Removed credentials for ${response.data.origin}.`);
 }
 
 function applyEmployeeApiCredentialStatus(status: EmployeeApiCredentialStatus): void {
@@ -865,6 +904,8 @@ interface PopupElements {
   employeeSearchInput: HTMLInputElement;
   employeeStatusFilter: HTMLSelectElement;
   employeeRefreshButton: HTMLButtonElement;
+  employeeSort: HTMLSelectElement;
+  employeeSortDirection: HTMLButtonElement;
   employeeSummary: HTMLElement;
   employeeList: HTMLElement;
   employeeDetail: HTMLElement;
@@ -884,6 +925,11 @@ interface PopupElements {
   employeeCopyTicket: HTMLInputElement;
   employeeCopyTargets: HTMLElement;
   employeeCopyButton: HTMLButtonElement;
+  defaultTimezone: HTMLInputElement;
+  employeeStatuses: HTMLTextAreaElement;
+  preferencesSave: HTMLButtonElement;
+  preferencesReset: HTMLButtonElement;
+  extensionVersion: HTMLElement;
 }
 
 function getPopupElements(): PopupElements {
@@ -915,6 +961,8 @@ function getPopupElements(): PopupElements {
     "#employee-status-filter"
   );
   const employeeRefreshButton = document.querySelector<HTMLButtonElement>("#employee-refresh");
+  const employeeSort = document.querySelector<HTMLSelectElement>("#employee-sort");
+  const employeeSortDirection = document.querySelector<HTMLButtonElement>("#employee-sort-direction");
   const employeeSummary = document.querySelector<HTMLElement>("#employee-summary");
   const employeeList = document.querySelector<HTMLElement>("#employee-list");
   const employeeDetail = document.querySelector<HTMLElement>("#employee-detail");
@@ -942,6 +990,11 @@ function getPopupElements(): PopupElements {
   const employeeCopyTicket = document.querySelector<HTMLInputElement>("#employee-copy-ticket");
   const employeeCopyTargets = document.querySelector<HTMLElement>("#employee-copy-targets");
   const employeeCopyButton = document.querySelector<HTMLButtonElement>("#employee-copy");
+  const defaultTimezone = document.querySelector<HTMLInputElement>("#default-timezone");
+  const employeeStatuses = document.querySelector<HTMLTextAreaElement>("#employee-statuses");
+  const preferencesSave = document.querySelector<HTMLButtonElement>("#preferences-save");
+  const preferencesReset = document.querySelector<HTMLButtonElement>("#preferences-reset");
+  const extensionVersion = document.querySelector<HTMLElement>("#extension-version");
   const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-tile"));
   const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".tool-panel"));
   const toolPanels = new Map(
@@ -977,6 +1030,8 @@ function getPopupElements(): PopupElements {
     !employeeSearchInput ||
     !employeeStatusFilter ||
     !employeeRefreshButton ||
+    !employeeSort ||
+    !employeeSortDirection ||
     !employeeSummary ||
     !employeeList ||
     !employeeDetail ||
@@ -996,6 +1051,11 @@ function getPopupElements(): PopupElements {
     !employeeCopyTicket ||
     !employeeCopyTargets ||
     !employeeCopyButton ||
+    !defaultTimezone ||
+    !employeeStatuses ||
+    !preferencesSave ||
+    !preferencesReset ||
+    !extensionVersion ||
     toolTiles.length === 0 ||
     toolPanels.size === 0 ||
     surfaceRadios.length === 0 ||
@@ -1031,6 +1091,8 @@ function getPopupElements(): PopupElements {
     employeeSearchInput,
     employeeStatusFilter,
     employeeRefreshButton,
+    employeeSort,
+    employeeSortDirection,
     employeeSummary,
     employeeList,
     employeeDetail,
@@ -1049,7 +1111,12 @@ function getPopupElements(): PopupElements {
     employeeTestSelectedButton,
     employeeCopyTicket,
     employeeCopyTargets,
-    employeeCopyButton
+    employeeCopyButton,
+    defaultTimezone,
+    employeeStatuses,
+    preferencesSave,
+    preferencesReset,
+    extensionVersion
   };
 }
 
@@ -1215,8 +1282,12 @@ async function withResult(action: () => Promise<string>): Promise<void> {
   elements.resultText.textContent = "Working\u2026";
 
   try {
-    elements.resultText.textContent = await action();
+    const message = await action();
+    elements.resultText.textContent = message;
+    showToast("success", "Completed", message.length > 240 ? `${message.slice(0, 237)}…` : message);
   } catch (error) {
-    elements.resultText.textContent = formatError(error);
+    const message = formatError(error);
+    elements.resultText.textContent = message;
+    showToast("error", "Action failed", message);
   }
 }

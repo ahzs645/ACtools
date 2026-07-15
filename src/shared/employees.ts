@@ -124,6 +124,7 @@ export interface EmployeeCopyMappingSelection {
 
 export interface EmployeeCopyTargetRequest {
   employee: EmployeeDetail;
+  sourceOrigin: string;
   targetOrigin: string;
   ticket: string;
   mappings: EmployeeCopyMappingSelection[];

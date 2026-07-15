@@ -106,9 +106,13 @@ function sanitizeEnvironment(config: EnvironmentConfig): EnvironmentConfig {
   }
   let supportUrl = config.supportUrl.trim() || DEFAULT_SUPPORT_URL;
   try {
-    supportUrl = new URL(supportUrl).toString();
+    const parsedSupportUrl = new URL(supportUrl);
+    if (parsedSupportUrl.protocol !== "https:" && parsedSupportUrl.protocol !== "http:") {
+      throw new Error("Unsupported protocol");
+    }
+    supportUrl = parsedSupportUrl.toString();
   } catch {
-    throw new Error("Support URL must be a valid URL.");
+    throw new Error("Support URL must be a valid HTTP or HTTPS URL.");
   }
   return { origin, name, supportUrl };
 }

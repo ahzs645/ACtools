@@ -78,6 +78,7 @@ export type RuntimeMessage =
     }
   | {
       type: "ac/popup/get-employee-api-credential-status";
+      payload?: { origin?: string };
     }
   | {
       type: "ac/popup/set-employee-api-credentials";
