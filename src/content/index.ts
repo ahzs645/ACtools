@@ -1,4 +1,4 @@
-import type { AvailabilityPostResult, CommandResult, PageStatus, RuntimeMessage } from "../shared/messages";
+import type { CommandResult, ContentCommandData, RuntimeMessage } from "../shared/messages";
 import { isContentMessage, isRuntimeMessage } from "../shared/messages";
 import { formatError } from "../shared/errors";
 import { DayViewOverlay } from "./features/dayview";
@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
 async function handleContentMessage(
   message: Extract<RuntimeMessage, { type: `ac/content/${string}` }>
-): Promise<CommandResult<PageStatus | AvailabilityPostResult | void>> {
+): Promise<CommandResult<ContentCommandData>> {
   switch (message.type) {
     case "ac/content/get-status":
       return {
@@ -50,6 +50,11 @@ async function handleContentMessage(
       return {
         ok: true,
         data: await client.postAvailability(message.payload)
+      };
+    case "ac/content/export-form-context-catalog":
+      return {
+        ok: true,
+        data: await client.exportFormContextCatalog()
       };
     default:
       return {

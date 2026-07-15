@@ -759,6 +759,51 @@ html[data-surface="sidepanel"] body {
   color: var(--ac-color-neutral-foreground-3);
 }
 
+.catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-12);
+  padding: var(--ac-space-16);
+  background-color: var(--ac-color-neutral-background-1);
+  border: 1px solid var(--ac-color-neutral-stroke-subtle);
+  border-radius: var(--ac-radius-large);
+  box-shadow: var(--ac-shadow-2);
+}
+
+.catalog-card__title {
+  margin: 0;
+  font-size: var(--ac-font-size-400);
+  line-height: var(--ac-line-height-400);
+  font-weight: var(--ac-font-weight-semibold);
+}
+
+.catalog-card__body,
+.catalog-card__list {
+  margin: 0;
+  color: var(--ac-color-neutral-foreground-2);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+}
+
+.catalog-card__list {
+  padding-left: var(--ac-space-20);
+}
+
+.catalog-card__list li + li {
+  margin-top: var(--ac-space-4);
+}
+
+.catalog-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-8);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .settings-section + .settings-section {
   margin-top: var(--ac-space-20);
 }

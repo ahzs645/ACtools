@@ -1,3 +1,5 @@
+import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
+
 export interface AvailabilityDraft {
   employeeId: number;
   availabilityTypeId: number;
@@ -41,6 +43,9 @@ export type RuntimeMessage =
       payload: AvailabilityDraft;
     }
   | {
+      type: "ac/popup/export-form-context-catalog";
+    }
+  | {
       type: "ac/popup/set-surface";
       payload: Surface;
     }
@@ -53,7 +58,16 @@ export type RuntimeMessage =
   | {
       type: "ac/content/post-availability";
       payload: AvailabilityDraft;
+    }
+  | {
+      type: "ac/content/export-form-context-catalog";
     };
+
+export type ContentCommandData =
+  | PageStatus
+  | AvailabilityPostResult
+  | AlayaCareFormContextCatalogSnapshot
+  | void;
 
 export const POPUP_FORM_STORAGE_KEY = "ac-tools-availability-draft";
 export const SURFACE_STORAGE_KEY = "ac-tools-surface";

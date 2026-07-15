@@ -154,6 +154,35 @@
               type="button"
               class="app-tile"
               role="listitem"
+              data-tool-panel="form-context-catalog"
+              data-tool-id="form-context-catalog"
+              data-tool-title="Field Catalog"
+              data-tool-subtitle="Export a reviewed snapshot of form-context bindings and options."
+              data-search-terms="field catalog form context bindings export json demographics options"
+              data-status="ready"
+            >
+              <span class="app-tile__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
+                  <path d="M4 5.5v16" />
+                  <path d="M8 7h8M8 11h8M8 15h5" />
+                </svg>
+              </span>
+              <span class="app-tile__label">Field Catalog</span>
+              <span class="app-tile__badge">JSON</span>
+            </button>
+
+            <button
+              type="button"
+              class="app-tile"
+              role="listitem"
               data-tool-panel="planned"
               data-tool-id="shift-swap"
               data-tool-title="Shift Swap"
@@ -413,6 +442,31 @@
                 Day View runs as an overlay on the active AlayaCare tab. Watch the result
                 log below for status.
               </p>
+            </div>
+          </div>
+
+          <div id="panel-form-context-catalog" class="tool-panel">
+            <div class="catalog-card">
+              <h3 class="catalog-card__title">Manual tenant snapshot</h3>
+              <p class="catalog-card__body">
+                Reads form-context fields, profile attributes, and supported option lists
+                from the active signed-in AlayaCare tenant. Nothing is sent to Webforms
+                automatically.
+              </p>
+              <ul class="catalog-card__list">
+                <li>Exports binding tags and native field types</li>
+                <li>Includes resolved dropdown options where available</li>
+                <li>CSV merges live Patient fields with the reviewed documentation table</li>
+                <li>Contains configuration metadata only—no client records</li>
+              </ul>
+              <div class="catalog-card__actions">
+                <button id="export-form-context-catalog-json" type="button" class="button button--primary">
+                  Export JSON
+                </button>
+                <button id="export-form-context-catalog-csv" type="button" class="button button--secondary">
+                  Export CSV
+                </button>
+              </div>
             </div>
           </div>
 

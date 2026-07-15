@@ -1,4 +1,8 @@
 import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../../shared/messages";
+import {
+  buildAlayaCareFormContextCatalog,
+  type AlayaCareFormContextCatalogSnapshot
+} from "../../shared/formContextCatalog";
 import { buildDailyRrule, getLocalDayUtcRange, minutesBetween } from "../utils/time";
 
 interface StoreConfigResponse {
@@ -136,6 +140,27 @@ export class AlayaCareClient {
     return this.fetchJson<VisitRecord>(`/api/v2/scheduler/visits/${encodeURIComponent(visitId)}`);
   }
 
+  async exportFormContextCatalog(): Promise<AlayaCareFormContextCatalogSnapshot> {
+    const [contexts, fields, profileAttributes, configuration, countries] = await Promise.all([
+      this.fetchJson<unknown>("/api/v1/agency/form-context/contexts"),
+      this.fetchJson<unknown>("/api/v1/agency/form-context/fields?include_contexts=true"),
+      this.fetchJson<unknown>("/api/v1/config/profile_attributes"),
+      this.fetchJson<unknown>("/api/v1/config/"),
+      this.fetchJson<unknown>(
+        "/api/v1/config/countries?only_supported=true&include_subdivisions=false"
+      )
+    ]);
+
+    return buildAlayaCareFormContextCatalog({
+      tenantOrigin: window.location.origin,
+      contexts,
+      fields,
+      profileAttributes,
+      configuration,
+      countries
+    });
+  }
+
   async postAvailability(draft: AvailabilityDraft): Promise<AvailabilityPostResult> {
     const uri = `/api/v2/employees/employee/${draft.employeeId}/availabilities`;
     const payload = {
@@ -264,4 +289,3 @@ async function parseResponseBody(response: Response): Promise<unknown> {
     return text;
   }
 }
-

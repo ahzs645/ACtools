@@ -19,6 +19,7 @@ To update later, download the next release zip, replace the folder contents, and
 
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
+- `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON or a reviewed CSV table
 - automatic `AC Tools` page button injection beside `.global-search`
 - planned slots in the drawer for shift swap, save/restore, PDF export, and rotation tooling
 
@@ -27,6 +28,16 @@ To update later, download the next release zip, replace the folder contents, and
 - The extension action opens `sidepanel.html` through the Chrome `sidePanel` API instead of a popup.
 - The manifest targets common AlayaCare host patterns (`*.alayacare.ca`, `*.alayacare.com`, `*.alayacare.cloud`) plus `localhost` for local testing.
 - The availability POST uses relative URLs and `credentials: "include"` so it piggybacks on the active AlayaCare session rather than storing credentials in the extension.
+- Field Catalog export is deliberately manual. It reads configuration metadata from the active signed-in tenant, downloads JSON or CSV, and does not send data directly to Webforms. The export contains no client records.
+
+### Export a field catalog snapshot
+
+1. Open an authenticated AlayaCare tab.
+2. Open AC Tools and select **Field Catalog**.
+3. Select **Export JSON** for the versioned machine-readable snapshot, or **Export CSV** for the reviewed 12-column client-field table.
+4. Review the downloaded file before using it to update a downstream curated catalog.
+
+The CSV follows the maintained reference columns from `SubSubSection` through `Note`. It merges current Patient binding labels and types with the committed documentation annotations, keeps annotation-only chart fields, and appends new live Patient fields with blank documentation cells for review.
 
 ---
 
@@ -76,4 +87,15 @@ To produce a release zip locally without publishing:
 npm run package
 ```
 
-This syncs `public/manifest.json` to the version in `package.json`, runs the production build, and writes `releases/ac-tools-v<version>.zip`. The script shells out to the system `zip` command, which is preinstalled on macOS, Linux, and the GitHub Actions Ubuntu runner. On Windows, run it from WSL or install a `zip` binary.
+To refresh the CSV documentation annotations from an approved tab-separated reference export before packaging:
+
+```bash
+node scripts/generate-form-context-annotations.mjs /path/to/reference.tsv
+```
+
+This syncs `public/manifest.json` to the version in `package.json`, runs the production build, and writes both:
+
+- `releases/ac-tools-latest/` — a stable unpacked directory that Chrome can stay pointed at. After packaging again, click the reload icon on the AC Tools card in `chrome://extensions`.
+- `releases/ac-tools-v<version>.zip` — the versioned release archive.
+
+The script shells out to the system `zip` command, which is preinstalled on macOS, Linux, and the GitHub Actions Ubuntu runner. On Windows, run it from WSL or install a `zip` binary.

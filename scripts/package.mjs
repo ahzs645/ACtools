@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,14 @@ async function main() {
 
   const releasesDir = resolve(rootDir, "releases");
   await mkdir(releasesDir, { recursive: true });
+
+  const latestDir = resolve(releasesDir, "ac-tools-latest");
+  const latestStagingDir = resolve(releasesDir, ".ac-tools-latest.tmp");
+  await rm(latestStagingDir, { recursive: true, force: true });
+  await cp(resolve(rootDir, "dist"), latestStagingDir, { recursive: true });
+  await rm(latestDir, { recursive: true, force: true });
+  await rename(latestStagingDir, latestDir);
+  console.log("Refreshed releases/ac-tools-latest/ for Chrome Load unpacked");
 
   const zipName = `ac-tools-v${version}.zip`;
   const zipPath = resolve(releasesDir, zipName);

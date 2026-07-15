@@ -1,4 +1,5 @@
 import { formatError } from "../shared/errors";
+import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
 import { getActiveTabId, sendMessageToTab } from "../shared/chrome";
 import type {
   AvailabilityPostResult,
@@ -124,7 +125,9 @@ async function applySurface(surface: Surface): Promise<void> {
 
 async function handlePopupMessage(
   message: Extract<RuntimeMessage, { type: `ac/popup/${string}` }>
-): Promise<CommandResult<PageStatus | AvailabilityPostResult | void>> {
+): Promise<
+  CommandResult<PageStatus | AvailabilityPostResult | AlayaCareFormContextCatalogSnapshot | void>
+> {
   if (message.type === "ac/popup/set-surface") {
     try {
       await chrome.storage.local.set({ [SURFACE_STORAGE_KEY]: message.payload });
@@ -147,6 +150,10 @@ async function handlePopupMessage(
       return sendMessageToTab<AvailabilityPostResult>(tabId, {
         type: "ac/content/post-availability",
         payload: message.payload
+      });
+    case "ac/popup/export-form-context-catalog":
+      return sendMessageToTab<AlayaCareFormContextCatalogSnapshot>(tabId, {
+        type: "ac/content/export-form-context-catalog"
       });
     default:
       return {

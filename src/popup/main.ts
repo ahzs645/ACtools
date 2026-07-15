@@ -2,6 +2,8 @@ import "./styles.css";
 
 import { sendRuntimeMessage } from "../shared/chrome";
 import { formatError } from "../shared/errors";
+import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
+import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
 import {
   DEFAULT_SURFACE,
   POPUP_FORM_STORAGE_KEY,
@@ -52,6 +54,14 @@ async function init(): Promise<void> {
 
   elements.refreshStatusButton.addEventListener("click", () => {
     void refreshStatus();
+  });
+
+  elements.catalogJsonExportButton.addEventListener("click", () => {
+    void exportFormContextCatalog("json");
+  });
+
+  elements.catalogCsvExportButton.addEventListener("click", () => {
+    void exportFormContextCatalog("csv");
   });
 
   elements.detailBackButton.addEventListener("click", () => {
@@ -351,6 +361,8 @@ interface PopupElements {
   surfaceRadios: HTMLInputElement[];
   themeRadios: HTMLInputElement[];
   surfaceHint: HTMLElement;
+  catalogJsonExportButton: HTMLButtonElement;
+  catalogCsvExportButton: HTMLButtonElement;
 }
 
 function getPopupElements(): PopupElements {
@@ -371,6 +383,12 @@ function getPopupElements(): PopupElements {
   const plannedTitle = document.querySelector<HTMLElement>("#planned-title");
   const plannedDescription = document.querySelector<HTMLElement>("#planned-description");
   const surfaceHint = document.querySelector<HTMLElement>("#surface-hint");
+  const catalogJsonExportButton = document.querySelector<HTMLButtonElement>(
+    "#export-form-context-catalog-json"
+  );
+  const catalogCsvExportButton = document.querySelector<HTMLButtonElement>(
+    "#export-form-context-catalog-csv"
+  );
   const toolTiles = Array.from(document.querySelectorAll<HTMLButtonElement>(".app-tile"));
   const panelElements = Array.from(document.querySelectorAll<HTMLElement>(".tool-panel"));
   const toolPanels = new Map(
@@ -401,6 +419,8 @@ function getPopupElements(): PopupElements {
     !plannedTitle ||
     !plannedDescription ||
     !surfaceHint ||
+    !catalogJsonExportButton ||
+    !catalogCsvExportButton ||
     toolTiles.length === 0 ||
     toolPanels.size === 0 ||
     surfaceRadios.length === 0 ||
@@ -430,8 +450,84 @@ function getPopupElements(): PopupElements {
     toolPanels,
     surfaceRadios,
     themeRadios,
-    surfaceHint
+    surfaceHint,
+    catalogJsonExportButton,
+    catalogCsvExportButton
   };
+}
+
+async function exportFormContextCatalog(format: "json" | "csv"): Promise<void> {
+  await withResult(async () => {
+    setCatalogExportButtonsDisabled(true);
+    try {
+      const response = await sendRuntimeMessage<AlayaCareFormContextCatalogSnapshot>({
+        type: "ac/popup/export-form-context-catalog"
+      });
+
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to export the form-context catalog.");
+      }
+
+      if (format === "json") {
+        downloadCatalogJson(response.data);
+      } else {
+        const csvResult = buildAlayaCareCatalogCsv(response.data);
+        downloadCatalogCsv(response.data, csvResult.csv);
+        return [
+          `Exported ${csvResult.rowCount} CSV rows.`,
+          `Merged ${csvResult.matchedAnnotationCount} live Patient bindings with reviewed annotations.`,
+          `Appended ${csvResult.liveOnlyCount} newly discovered live fields.`
+        ].join("\n");
+      }
+      return [
+        `Exported ${response.data.counts.fields} fields from ${response.data.counts.contexts} contexts.`,
+        `Resolved ${response.data.counts.options} option values.`,
+        "Next: run the Webforms catalog curation command with this JSON and Book1.csv."
+      ].join("\n");
+    } finally {
+      setCatalogExportButtonsDisabled(false);
+    }
+  });
+}
+
+function downloadCatalogJson(snapshot: AlayaCareFormContextCatalogSnapshot): void {
+  const tenant = safeTenantName(snapshot.tenantOrigin);
+  const date = snapshot.exportedAt.slice(0, 10);
+  const filename = `alayacare-field-catalog-${tenant}-${date}.json`;
+  downloadFile(`${JSON.stringify(snapshot, null, 2)}\n`, "application/json", filename);
+}
+
+function downloadCatalogCsv(
+  snapshot: AlayaCareFormContextCatalogSnapshot,
+  csv: string
+): void {
+  const tenant = safeTenantName(snapshot.tenantOrigin);
+  const date = snapshot.exportedAt.slice(0, 10);
+  const filename = `alayacare-field-catalog-${tenant}-${date}.csv`;
+  downloadFile(csv, "text/csv;charset=utf-8", filename);
+}
+
+function downloadFile(content: string, type: string, filename: string): void {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function setCatalogExportButtonsDisabled(disabled: boolean): void {
+  elements.catalogJsonExportButton.disabled = disabled;
+  elements.catalogCsvExportButton.disabled = disabled;
+}
+
+function safeTenantName(origin: string): string {
+  try {
+    return new URL(origin).hostname.split(".")[0]?.replace(/[^a-z0-9-]+/gi, "-") || "tenant";
+  } catch {
+    return "tenant";
+  }
 }
 
 async function refreshStatus(): Promise<void> {
