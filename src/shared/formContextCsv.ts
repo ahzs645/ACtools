@@ -29,25 +29,57 @@ export interface AlayaCareCatalogCsvResult {
   liveOnlyCount: number;
 }
 
+export type AlayaCareCatalogRowSource = "matched" | "annotation-only" | "live-only";
+
+export interface AlayaCareCatalogRow {
+  values: string[];
+  source: AlayaCareCatalogRowSource;
+}
+
+export interface AlayaCareCatalogRowsResult {
+  headers: typeof ALAYACARE_CATALOG_CSV_HEADERS;
+  rows: AlayaCareCatalogRow[];
+  rowCount: number;
+  matchedAnnotationCount: number;
+  liveOnlyCount: number;
+}
+
 export function buildAlayaCareCatalogCsv(
   snapshot: AlayaCareFormContextCatalogSnapshot
 ): AlayaCareCatalogCsvResult {
+  const result = buildAlayaCareCatalogRows(snapshot);
+  const csvRows = [result.headers, ...result.rows.map((row) => row.values)];
+  return {
+    csv: `\uFEFF${csvRows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`,
+    rowCount: result.rowCount,
+    matchedAnnotationCount: result.matchedAnnotationCount,
+    liveOnlyCount: result.liveOnlyCount
+  };
+}
+
+export function buildAlayaCareCatalogRows(
+  snapshot: AlayaCareFormContextCatalogSnapshot
+): AlayaCareCatalogRowsResult {
   const patientFields = snapshot.fields.filter((field) => field.contextName === "Patient");
   const usedFieldIndexes = new Set<number>();
   let matchedAnnotationCount = 0;
-  const rows = ALAYACARE_FORM_CONTEXT_ANNOTATIONS.map((annotation) => {
+  const rows: AlayaCareCatalogRow[] = ALAYACARE_FORM_CONTEXT_ANNOTATIONS.map((annotation) => {
     const matchIndex = findLiveFieldIndex(annotation, patientFields, usedFieldIndexes);
-    if (matchIndex < 0) return annotationRow(annotation);
+    if (matchIndex < 0) {
+      return { values: annotationRow(annotation), source: "annotation-only" };
+    }
     usedFieldIndexes.add(matchIndex);
     matchedAnnotationCount += 1;
-    return mergedRow(patientFields[matchIndex], annotation);
+    return { values: mergedRow(patientFields[matchIndex], annotation), source: "matched" };
   });
   const liveOnlyFields = patientFields.filter((_field, index) => !usedFieldIndexes.has(index));
-  liveOnlyFields.forEach((field) => rows.push(liveFieldRow(field)));
+  liveOnlyFields.forEach((field) => {
+    rows.push({ values: liveFieldRow(field), source: "live-only" });
+  });
 
-  const csvRows = [ALAYACARE_CATALOG_CSV_HEADERS, ...rows];
   return {
-    csv: `\uFEFF${csvRows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`,
+    headers: ALAYACARE_CATALOG_CSV_HEADERS,
+    rows,
     rowCount: rows.length,
     matchedAnnotationCount,
     liveOnlyCount: liveOnlyFields.length

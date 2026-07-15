@@ -19,7 +19,7 @@ To update later, download the next release zip, replace the folder contents, and
 
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
-- `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON or a reviewed CSV table
+- `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON, CSV, or a styled Excel workbook
 - `Employee Manager` for authenticated employee search, session caching, configurable sorting, details, status updates, audit notes, and guarded cross-tenant employee copying
 - copy dry runs with duplicate detection, automatic and manual group/role/department/employment-type mappings, ServiceNow shortcuts, and per-tenant execution progress
 - `Environment Manager` for friendly tenant names, add/edit/delete, a default tenant, non-secret import/export, per-tenant credential setup, and authentication/metadata health checks
@@ -34,16 +34,16 @@ To update later, download the next release zip, replace the folder contents, and
 - The extension action opens `sidepanel.html` through the Chrome `sidePanel` API instead of a popup.
 - The manifest targets common AlayaCare host patterns (`*.alayacare.ca`, `*.alayacare.com`, `*.alayacare.cloud`) plus `localhost` for local testing.
 - The availability POST uses relative URLs and `credentials: "include"` so it piggybacks on the active AlayaCare session rather than storing credentials in the extension.
-- Field Catalog export is deliberately manual. It reads configuration metadata from the active signed-in tenant, downloads JSON or CSV, and does not send data directly to Webforms. The export contains no client records.
+- Field Catalog export is deliberately manual. It reads configuration metadata from the active signed-in tenant, downloads JSON, CSV, or Excel, and does not send data directly to Webforms. The export contains no client records.
 
 ### Export a field catalog snapshot
 
 1. Open an authenticated AlayaCare tab.
 2. Open AC Tools and select **Field Catalog**.
-3. Select **Export JSON** for the versioned machine-readable snapshot, or **Export CSV** for the reviewed 12-column client-field table.
+3. Select **Export JSON** for the versioned machine-readable snapshot, **Export CSV** for the portable raw table, or **Export Excel** for the styled and filterable 12-column client-field table.
 4. Review the downloaded file before using it to update a downstream curated catalog.
 
-The CSV follows the maintained reference columns from `SubSubSection` through `Note`. It merges current Patient binding labels and types with the committed documentation annotations, keeps annotation-only chart fields, and appends new live Patient fields with blank documentation cells for review.
+The CSV and Excel exports follow the maintained reference columns from `SubSubSection` through `Note`. Both merge current Patient binding labels and types with the committed documentation annotations, keep annotation-only chart fields, and append new live Patient fields with blank documentation cells for review. The Excel workbook additionally highlights those review rows and includes frozen headers, filters, wrapped text, readable column sizing, and alternating row shading.
 
 ---
 
@@ -97,7 +97,7 @@ To produce a release zip locally without publishing:
 npm run package
 ```
 
-To refresh the CSV documentation annotations from an approved tab-separated reference export before packaging:
+To refresh the field-catalog documentation annotations from an approved tab-separated reference export before packaging:
 
 ```bash
 node scripts/generate-form-context-annotations.mjs /path/to/reference.tsv

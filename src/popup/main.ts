@@ -4,6 +4,7 @@ import { sendRuntimeMessage } from "../shared/chrome";
 import { formatError } from "../shared/errors";
 import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
 import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
+import { buildAlayaCareCatalogXlsx } from "../shared/formContextXlsx";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -107,6 +108,10 @@ async function init(): Promise<void> {
 
   elements.catalogCsvExportButton.addEventListener("click", () => {
     void exportFormContextCatalog("csv");
+  });
+
+  elements.catalogXlsxExportButton.addEventListener("click", () => {
+    void exportFormContextCatalog("xlsx");
   });
 
   elements.employeeRefreshButton.addEventListener("click", () => {
@@ -901,6 +906,7 @@ interface PopupElements {
   surfaceHint: HTMLElement;
   catalogJsonExportButton: HTMLButtonElement;
   catalogCsvExportButton: HTMLButtonElement;
+  catalogXlsxExportButton: HTMLButtonElement;
   employeeSearchInput: HTMLInputElement;
   employeeStatusFilter: HTMLSelectElement;
   employeeRefreshButton: HTMLButtonElement;
@@ -955,6 +961,9 @@ function getPopupElements(): PopupElements {
   );
   const catalogCsvExportButton = document.querySelector<HTMLButtonElement>(
     "#export-form-context-catalog-csv"
+  );
+  const catalogXlsxExportButton = document.querySelector<HTMLButtonElement>(
+    "#export-form-context-catalog-xlsx"
   );
   const employeeSearchInput = document.querySelector<HTMLInputElement>("#employee-search");
   const employeeStatusFilter = document.querySelector<HTMLSelectElement>(
@@ -1027,6 +1036,7 @@ function getPopupElements(): PopupElements {
     !surfaceHint ||
     !catalogJsonExportButton ||
     !catalogCsvExportButton ||
+    !catalogXlsxExportButton ||
     !employeeSearchInput ||
     !employeeStatusFilter ||
     !employeeRefreshButton ||
@@ -1088,6 +1098,7 @@ function getPopupElements(): PopupElements {
     surfaceHint,
     catalogJsonExportButton,
     catalogCsvExportButton,
+    catalogXlsxExportButton,
     employeeSearchInput,
     employeeStatusFilter,
     employeeRefreshButton,
@@ -1120,7 +1131,7 @@ function getPopupElements(): PopupElements {
   };
 }
 
-async function exportFormContextCatalog(format: "json" | "csv"): Promise<void> {
+async function exportFormContextCatalog(format: "json" | "csv" | "xlsx"): Promise<void> {
   await withResult(async () => {
     setCatalogExportButtonsDisabled(true);
     try {
@@ -1134,7 +1145,7 @@ async function exportFormContextCatalog(format: "json" | "csv"): Promise<void> {
 
       if (format === "json") {
         downloadCatalogJson(response.data);
-      } else {
+      } else if (format === "csv") {
         const csvResult = buildAlayaCareCatalogCsv(response.data);
         downloadCatalogCsv(response.data, csvResult.csv);
         return [
@@ -1142,11 +1153,19 @@ async function exportFormContextCatalog(format: "json" | "csv"): Promise<void> {
           `Merged ${csvResult.matchedAnnotationCount} live Patient bindings with reviewed annotations.`,
           `Appended ${csvResult.liveOnlyCount} newly discovered live fields.`
         ].join("\n");
+      } else {
+        const xlsxResult = buildAlayaCareCatalogXlsx(response.data);
+        downloadCatalogXlsx(response.data, xlsxResult.xlsx, xlsxResult.contentType);
+        return [
+          `Exported ${xlsxResult.rowCount} styled Excel rows.`,
+          `Merged ${xlsxResult.matchedAnnotationCount} live Patient bindings with reviewed annotations.`,
+          `Highlighted ${xlsxResult.liveOnlyCount} newly discovered live fields for review.`
+        ].join("\n");
       }
       return [
         `Exported ${response.data.counts.fields} fields from ${response.data.counts.contexts} contexts.`,
         `Resolved ${response.data.counts.options} option values.`,
-        "Next: run the Webforms catalog curation command with this JSON and Book1.csv."
+        "Next: run the Webforms catalog curation command with this JSON and the reviewed catalog export."
       ].join("\n");
     } finally {
       setCatalogExportButtonsDisabled(false);
@@ -1171,8 +1190,26 @@ function downloadCatalogCsv(
   downloadFile(csv, "text/csv;charset=utf-8", filename);
 }
 
-function downloadFile(content: string, type: string, filename: string): void {
-  const blob = new Blob([content], { type });
+function downloadCatalogXlsx(
+  snapshot: AlayaCareFormContextCatalogSnapshot,
+  xlsx: Uint8Array,
+  contentType: string
+): void {
+  const tenant = safeTenantName(snapshot.tenantOrigin);
+  const date = snapshot.exportedAt.slice(0, 10);
+  const filename = `alayacare-field-catalog-${tenant}-${date}.xlsx`;
+  downloadFile(xlsx, contentType, filename);
+}
+
+function downloadFile(content: string | Uint8Array, type: string, filename: string): void {
+  const blobContent =
+    typeof content === "string"
+      ? content
+      : (content.buffer.slice(
+          content.byteOffset,
+          content.byteOffset + content.byteLength
+        ) as ArrayBuffer);
+  const blob = new Blob([blobContent], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -1184,6 +1221,7 @@ function downloadFile(content: string, type: string, filename: string): void {
 function setCatalogExportButtonsDisabled(disabled: boolean): void {
   elements.catalogJsonExportButton.disabled = disabled;
   elements.catalogCsvExportButton.disabled = disabled;
+  elements.catalogXlsxExportButton.disabled = disabled;
 }
 
 function safeTenantName(origin: string): string {

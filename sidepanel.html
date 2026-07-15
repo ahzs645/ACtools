@@ -198,7 +198,7 @@
               data-tool-id="form-context-catalog"
               data-tool-title="Field Catalog"
               data-tool-subtitle="Export a reviewed snapshot of form-context bindings and options."
-              data-search-terms="field catalog form context bindings export json demographics options"
+              data-search-terms="field catalog form context bindings export json csv excel xlsx demographics options"
               data-status="ready"
             >
               <span class="app-tile__icon" aria-hidden="true">
@@ -216,7 +216,7 @@
                 </svg>
               </span>
               <span class="app-tile__label">Field Catalog</span>
-              <span class="app-tile__badge">JSON</span>
+              <span class="app-tile__badge">XLSX</span>
             </button>
 
             <button
@@ -717,7 +717,7 @@
               <ul class="catalog-card__list">
                 <li>Exports binding tags and native field types</li>
                 <li>Includes resolved dropdown options where available</li>
-                <li>CSV merges live Patient fields with the reviewed documentation table</li>
+                <li>CSV or styled Excel merges live Patient fields with the reviewed documentation table</li>
                 <li>Contains configuration metadata only—no client records</li>
               </ul>
               <div class="catalog-card__actions">
@@ -726,6 +726,9 @@
                 </button>
                 <button id="export-form-context-catalog-csv" type="button" class="button button--secondary">
                   Export CSV
+                </button>
+                <button id="export-form-context-catalog-xlsx" type="button" class="button button--secondary">
+                  Export Excel
                 </button>
               </div>
             </div>
