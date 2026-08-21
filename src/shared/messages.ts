@@ -1,5 +1,10 @@
 import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
 import type {
+  ClientChartExportSnapshot,
+  ClientChartRankResponse,
+  ClientChartSearchResponse
+} from "./clientChart";
+import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
   EmployeeCopyRequest,
@@ -18,6 +23,17 @@ import type {
   EnvironmentHealth,
   EnvironmentRegistry
 } from "./environments";
+import type {
+  ConnectorScenarioBundle,
+  ConnectorScenarioBulkDownloadResult,
+  ConnectorScenarioHealth,
+  ConnectorReferenceCatalog,
+  ConnectorScenarioListResult,
+  ConnectorScenarioSaveRequest,
+  ConnectorScenarioSaveResult,
+  ConnectorScenarioSnapshot,
+  ConnectorScenarioSource
+} from "./connectorScenarios";
 
 export interface AvailabilityDraft {
   employeeId: number;
@@ -63,6 +79,43 @@ export type RuntimeMessage =
     }
   | {
       type: "ac/popup/export-form-context-catalog";
+    }
+  | {
+      type: "ac/popup/search-client-charts";
+      payload: { query: string; confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/popup/rank-client-charts";
+      payload: { limit: 10 | 25; confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/popup/export-active-client-chart";
+      payload: { confirmedSynthetic: boolean; clientId?: number };
+    }
+  | {
+      type: "ac/popup/get-connector-scenario";
+      payload: { source: ConnectorScenarioSource; scenarioId?: number };
+    }
+  | {
+      type: "ac/popup/list-connector-scenarios";
+    }
+  | {
+      type: "ac/popup/export-connector-scenario-bundle";
+      payload?: { scenarioId?: number };
+    }
+  | {
+      type: "ac/popup/download-all-connector-scenarios";
+    }
+  | {
+      type: "ac/popup/get-connector-reference-catalog";
+    }
+  | {
+      type: "ac/popup/get-connector-scenario-health";
+      payload: { scenarioId: number };
+    }
+  | {
+      type: "ac/popup/save-connector-scenario";
+      payload: ConnectorScenarioSaveRequest;
     }
   | {
       type: "ac/popup/list-employees";
@@ -144,6 +197,43 @@ export type RuntimeMessage =
       type: "ac/content/export-form-context-catalog";
     }
   | {
+      type: "ac/content/search-client-charts";
+      payload: { query: string; confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/content/rank-client-charts";
+      payload: { limit: 10 | 25; confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/content/export-active-client-chart";
+      payload: { confirmedSynthetic: boolean; clientId?: number };
+    }
+  | {
+      type: "ac/content/get-connector-scenario";
+      payload: { source: ConnectorScenarioSource; scenarioId?: number };
+    }
+  | {
+      type: "ac/content/list-connector-scenarios";
+    }
+  | {
+      type: "ac/content/export-connector-scenario-bundle";
+      payload?: { scenarioId?: number };
+    }
+  | {
+      type: "ac/content/download-all-connector-scenarios";
+    }
+  | {
+      type: "ac/content/get-connector-reference-catalog";
+    }
+  | {
+      type: "ac/content/get-connector-scenario-health";
+      payload: { scenarioId: number };
+    }
+  | {
+      type: "ac/content/save-connector-scenario";
+      payload: ConnectorScenarioSaveRequest;
+    }
+  | {
       type: "ac/content/list-employees";
       payload: EmployeeListRequest;
     }
@@ -156,6 +246,16 @@ export type ContentCommandData =
   | PageStatus
   | AvailabilityPostResult
   | AlayaCareFormContextCatalogSnapshot
+  | ClientChartExportSnapshot
+  | ClientChartSearchResponse
+  | ClientChartRankResponse
+  | ConnectorScenarioSnapshot
+  | ConnectorScenarioBundle
+  | ConnectorScenarioBulkDownloadResult
+  | ConnectorScenarioListResult
+  | ConnectorReferenceCatalog
+  | ConnectorScenarioHealth
+  | ConnectorScenarioSaveResult
   | EmployeeListResult
   | EmployeeDetail
   | EmployeeWriteResult

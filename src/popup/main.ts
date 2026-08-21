@@ -3,6 +3,14 @@ import "./styles.css";
 import { sendRuntimeMessage } from "../shared/chrome";
 import { formatError } from "../shared/errors";
 import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
+import type {
+  ClientChartExportSnapshot,
+  ClientChartRankedResult,
+  ClientChartRankResponse,
+  ClientChartSearchResponse,
+  ClientChartSearchResult
+} from "../shared/clientChart";
+import type { ClientChartPdfParseSnapshot } from "../shared/clientChartPdf";
 import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
 import { buildAlayaCareCatalogXlsx } from "../shared/formContextXlsx";
 import type {
@@ -15,6 +23,7 @@ import type {
 } from "../shared/employees";
 import type { AppPreferences } from "../shared/environments";
 import { EnvironmentManagerController } from "./features/environments/controller";
+import { ConnectorUtilitiesController } from "./features/connectors/controller";
 import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
 import { EmployeeCopyController } from "./features/employees/copyController";
 import {
@@ -62,11 +71,16 @@ let configuredEmployeeTenants: EmployeeConfiguredTenant[] = [];
 let employeeSortField: EmployeeSortField = "last_name";
 let employeeSortDirection: SortDirection = "asc";
 let appPreferences!: AppPreferences;
+let clientChartSnapshot: ClientChartExportSnapshot | null = null;
+let clientChartPdfSnapshot: ClientChartPdfParseSnapshot | null = null;
+let clientChartSearchResults: ClientChartSearchResult[] = [];
+let clientChartRankings = new Map<number, ClientChartRankedResult>();
 
 const elements = getPopupElements();
 const environmentManager = new EnvironmentManagerController(async () => {
   await refreshConfiguredEmployeeTenants();
 });
+const connectorUtilities = new ConnectorUtilitiesController();
 const employeeCopyController = new EmployeeCopyController({
   getEmployee: () => selectedEmployee
     ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }
@@ -80,6 +94,7 @@ const employeeCopyController = new EmployeeCopyController({
 void init();
 
 async function init(): Promise<void> {
+  connectorUtilities.init();
   appPreferences = await loadAppPreferences();
   await applyStoredTheme();
   await applyStoredSurfaceSelection();
@@ -112,6 +127,84 @@ async function init(): Promise<void> {
 
   elements.catalogXlsxExportButton.addEventListener("click", () => {
     void exportFormContextCatalog("xlsx");
+  });
+
+  elements.clientChartSyntheticConfirm.addEventListener("change", () => {
+    const confirmed = elements.clientChartSyntheticConfirm.checked;
+    elements.inspectClientChartButton.disabled = !confirmed;
+    elements.clientChartSearchInput.disabled = !confirmed;
+    elements.searchClientChartsButton.disabled =
+      !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
+    elements.clientChartRankLimit.disabled = !confirmed;
+    elements.rankClientChartsButton.disabled = !confirmed;
+    elements.clientChartPdfFiles.disabled = !confirmed;
+    elements.parseClientChartPdfsButton.disabled =
+      !confirmed || (elements.clientChartPdfFiles.files?.length ?? 0) === 0;
+    if (!confirmed) {
+      clientChartSnapshot = null;
+      clientChartPdfSnapshot = null;
+      clientChartSearchResults = [];
+      clientChartRankings.clear();
+      elements.clientChartSearchInput.value = "";
+      elements.clientChartPdfFiles.value = "";
+      elements.downloadClientChartButton.disabled = true;
+      elements.downloadClientChartPdfJsonButton.disabled = true;
+      elements.clientChartSummary.textContent =
+        "Confirm synthetic UAT data, then search for a client or inspect the active chart.";
+      renderClientChartSearchResults(
+        "Confirm synthetic UAT data above to enable patient search."
+      );
+      elements.clientChartPdfSummary.textContent =
+        "Confirm synthetic UAT data above, then select the batch PDFs.";
+    }
+  });
+
+  elements.inspectClientChartButton.addEventListener("click", () => {
+    void inspectActiveClientChart();
+  });
+
+  elements.clientChartSearchInput.addEventListener("input", () => {
+    elements.searchClientChartsButton.disabled =
+      !elements.clientChartSyntheticConfirm.checked ||
+      elements.clientChartSearchInput.value.trim().length < 2;
+  });
+
+  elements.clientChartSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !elements.searchClientChartsButton.disabled) {
+      event.preventDefault();
+      void searchClientCharts();
+    }
+  });
+
+  elements.searchClientChartsButton.addEventListener("click", () => {
+    void searchClientCharts();
+  });
+
+  elements.rankClientChartsButton.addEventListener("click", () => {
+    void rankClientCharts();
+  });
+
+  elements.downloadClientChartButton.addEventListener("click", () => {
+    if (clientChartSnapshot) downloadClientChartJson(clientChartSnapshot);
+  });
+
+  elements.clientChartPdfFiles.addEventListener("change", () => {
+    clientChartPdfSnapshot = null;
+    elements.downloadClientChartPdfJsonButton.disabled = true;
+    const files = Array.from(elements.clientChartPdfFiles.files ?? []);
+    elements.parseClientChartPdfsButton.disabled =
+      !elements.clientChartSyntheticConfirm.checked || files.length === 0;
+    elements.clientChartPdfSummary.textContent = files.length > 0
+      ? `${files.length} PDF${files.length === 1 ? "" : "s"} selected. Ready to parse locally.`
+      : "Select one or more AlayaCare batch PDFs.";
+  });
+
+  elements.parseClientChartPdfsButton.addEventListener("click", () => {
+    void parseSelectedClientChartPdfs();
+  });
+
+  elements.downloadClientChartPdfJsonButton.addEventListener("click", () => {
+    if (clientChartPdfSnapshot) downloadClientChartPdfJson(clientChartPdfSnapshot);
   });
 
   elements.employeeRefreshButton.addEventListener("click", () => {
@@ -157,6 +250,14 @@ async function init(): Promise<void> {
   elements.preferencesReset.addEventListener("click", () => void resetPreferencesUi());
 
   elements.detailBackButton.addEventListener("click", () => {
+    const connectorPanel = elements.toolPanels.get("connector-utilities");
+    if (connectorPanel?.classList.contains("is-active") && connectorUtilities.backToOptions()) {
+      return;
+    }
+    showLauncher();
+  });
+
+  elements.homeButton.addEventListener("click", () => {
     showLauncher();
   });
 
@@ -260,6 +361,12 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
     return;
   }
 
+  if (panelName === "connector-utilities") {
+    showDetail(title, subtitle, panelName);
+    await connectorUtilities.open();
+    return;
+  }
+
   if (panelName) {
     showDetail(title, subtitle, panelName);
   }
@@ -274,12 +381,16 @@ function showLauncher(): void {
 }
 
 function showDetail(title: string, subtitle: string, panelName: string): void {
+  const isConnector = panelName === "connector-utilities";
   elements.detailTitle.textContent = title;
   elements.detailSubtitle.textContent = subtitle;
   elements.launcherView.hidden = true;
   elements.launcherView.classList.remove("is-active");
   elements.detailView.hidden = false;
   elements.detailView.classList.add("is-active");
+  elements.detailBackButton.hidden = isConnector;
+  elements.detailHeaderText.hidden = isConnector;
+  elements.connectorDetailActions.hidden = !isConnector;
 
   elements.toolPanels.forEach((panel, key) => {
     const isActive = key === panelName;
@@ -287,7 +398,7 @@ function showDetail(title: string, subtitle: string, panelName: string): void {
     panel.classList.toggle("is-active", isActive);
   });
 
-  elements.resultContainer.hidden = panelName === "settings";
+  elements.resultContainer.hidden = panelName === "settings" || panelName === "connector-utilities";
 }
 
 function showSettings(): void {
@@ -588,18 +699,65 @@ function createEmployeeListButton(employee: EmployeeSummary): HTMLButtonElement 
   button.type = "button";
   button.className = "employee-list__item";
   button.dataset.employeeId = String(employee.id);
+  button.setAttribute("aria-label", `View employee details for ${employeeDisplayName(employee)}`);
+
+  const header = document.createElement("span");
+  header.className = "employee-list__header";
+
+  const avatar = document.createElement("span");
+  avatar.className = "employee-list__avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = getPersonInitials(employeeDisplayName(employee));
+
+  const identity = document.createElement("span");
+  identity.className = "employee-list__identity";
 
   const name = document.createElement("span");
   name.className = "employee-list__name";
   name.textContent = employeeDisplayName(employee);
+  identity.append(name);
 
-  const meta = document.createElement("span");
-  meta.className = "employee-list__meta";
-  meta.textContent = `#${employee.id} · ${employee.status ?? "unknown"}${
-    employee.designation ? ` · ${employee.designation}` : ""
-  }`;
+  const status = document.createElement("span");
+  status.className = "employee-list__status";
+  status.dataset.tone = getPersonStatusTone(employee.status);
+  status.textContent = employee.status?.replace(/_/g, " ") || "Unknown";
+  header.append(avatar, identity, status);
 
-  button.append(name, meta);
+  const metadata = document.createElement("span");
+  metadata.className = "employee-list__metadata";
+  const metadataItems: Array<[string, string | undefined, boolean?]> = [
+    ["Employee ID", `#${employee.id}`],
+    ["Designation", employee.designation],
+    ["Email", employee.email, true]
+  ];
+  for (const [label, value, wide] of metadataItems) {
+    if (!value) {
+      continue;
+    }
+    const item = document.createElement("span");
+    item.className = `employee-list__metadata-item${wide ? " employee-list__metadata-item--wide" : ""}`;
+    const itemLabel = document.createElement("span");
+    itemLabel.className = "employee-list__metadata-label";
+    itemLabel.textContent = label;
+    const itemValue = document.createElement("span");
+    itemValue.className = "employee-list__metadata-value";
+    itemValue.textContent = value;
+    item.append(itemLabel, itemValue);
+    metadata.append(item);
+  }
+
+  const footer = document.createElement("span");
+  footer.className = "employee-list__footer";
+  const action = document.createElement("span");
+  action.className = "employee-list__action";
+  action.textContent = "View details";
+  const arrow = document.createElement("span");
+  arrow.className = "employee-list__arrow";
+  arrow.setAttribute("aria-hidden", "true");
+  arrow.textContent = "→";
+  footer.append(action, arrow);
+
+  button.append(header, metadata, footer);
   button.addEventListener("click", () => {
     void loadEmployeeDetail(employee.id);
   });
@@ -890,6 +1048,7 @@ interface PopupElements {
   refreshStatusButton: HTMLButtonElement;
   themeToggle: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
+  homeButton: HTMLButtonElement;
   searchInput: HTMLInputElement;
   emptySearch: HTMLElement;
   launcherView: HTMLElement;
@@ -897,6 +1056,8 @@ interface PopupElements {
   detailTitle: HTMLElement;
   detailSubtitle: HTMLElement;
   detailBackButton: HTMLButtonElement;
+  detailHeaderText: HTMLElement;
+  connectorDetailActions: HTMLElement;
   plannedTitle: HTMLElement;
   plannedDescription: HTMLElement;
   toolTiles: HTMLButtonElement[];
@@ -907,6 +1068,19 @@ interface PopupElements {
   catalogJsonExportButton: HTMLButtonElement;
   catalogCsvExportButton: HTMLButtonElement;
   catalogXlsxExportButton: HTMLButtonElement;
+  clientChartSyntheticConfirm: HTMLInputElement;
+  clientChartSearchInput: HTMLInputElement;
+  searchClientChartsButton: HTMLButtonElement;
+  clientChartRankLimit: HTMLSelectElement;
+  rankClientChartsButton: HTMLButtonElement;
+  clientChartSearchResults: HTMLElement;
+  inspectClientChartButton: HTMLButtonElement;
+  downloadClientChartButton: HTMLButtonElement;
+  clientChartSummary: HTMLElement;
+  clientChartPdfFiles: HTMLInputElement;
+  parseClientChartPdfsButton: HTMLButtonElement;
+  downloadClientChartPdfJsonButton: HTMLButtonElement;
+  clientChartPdfSummary: HTMLElement;
   employeeSearchInput: HTMLInputElement;
   employeeStatusFilter: HTMLSelectElement;
   employeeRefreshButton: HTMLButtonElement;
@@ -946,6 +1120,7 @@ function getPopupElements(): PopupElements {
   const refreshStatusButton = document.querySelector<HTMLButtonElement>("#refresh-status");
   const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
   const settingsButton = document.querySelector<HTMLButtonElement>("#settings-button");
+  const homeButton = document.querySelector<HTMLButtonElement>("#home-button");
   const searchInput = document.querySelector<HTMLInputElement>("#tool-search");
   const emptySearch = document.querySelector<HTMLElement>("#empty-search");
   const launcherView = document.querySelector<HTMLElement>("#view-launcher");
@@ -953,6 +1128,8 @@ function getPopupElements(): PopupElements {
   const detailTitle = document.querySelector<HTMLElement>("#detail-title");
   const detailSubtitle = document.querySelector<HTMLElement>("#detail-subtitle");
   const detailBackButton = document.querySelector<HTMLButtonElement>("#detail-back");
+  const detailHeaderText = document.querySelector<HTMLElement>("#detail-header-text");
+  const connectorDetailActions = document.querySelector<HTMLElement>("#connector-detail-actions");
   const plannedTitle = document.querySelector<HTMLElement>("#planned-title");
   const plannedDescription = document.querySelector<HTMLElement>("#planned-description");
   const surfaceHint = document.querySelector<HTMLElement>("#surface-hint");
@@ -964,6 +1141,41 @@ function getPopupElements(): PopupElements {
   );
   const catalogXlsxExportButton = document.querySelector<HTMLButtonElement>(
     "#export-form-context-catalog-xlsx"
+  );
+  const clientChartSyntheticConfirm = document.querySelector<HTMLInputElement>(
+    "#client-chart-synthetic-confirm"
+  );
+  const clientChartSearchInput = document.querySelector<HTMLInputElement>(
+    "#client-chart-search-input"
+  );
+  const searchClientChartsButton = document.querySelector<HTMLButtonElement>(
+    "#search-client-charts"
+  );
+  const clientChartRankLimit = document.querySelector<HTMLSelectElement>(
+    "#client-chart-rank-limit"
+  );
+  const rankClientChartsButton = document.querySelector<HTMLButtonElement>(
+    "#rank-client-charts"
+  );
+  const clientChartSearchResults = document.querySelector<HTMLElement>(
+    "#client-chart-search-results"
+  );
+  const inspectClientChartButton = document.querySelector<HTMLButtonElement>(
+    "#inspect-client-chart"
+  );
+  const downloadClientChartButton = document.querySelector<HTMLButtonElement>(
+    "#download-client-chart"
+  );
+  const clientChartSummary = document.querySelector<HTMLElement>("#client-chart-summary");
+  const clientChartPdfFiles = document.querySelector<HTMLInputElement>("#client-chart-pdf-files");
+  const parseClientChartPdfsButton = document.querySelector<HTMLButtonElement>(
+    "#parse-client-chart-pdfs"
+  );
+  const downloadClientChartPdfJsonButton = document.querySelector<HTMLButtonElement>(
+    "#download-client-chart-pdf-json"
+  );
+  const clientChartPdfSummary = document.querySelector<HTMLElement>(
+    "#client-chart-pdf-summary"
   );
   const employeeSearchInput = document.querySelector<HTMLInputElement>("#employee-search");
   const employeeStatusFilter = document.querySelector<HTMLSelectElement>(
@@ -1024,6 +1236,7 @@ function getPopupElements(): PopupElements {
     !refreshStatusButton ||
     !themeToggle ||
     !settingsButton ||
+    !homeButton ||
     !searchInput ||
     !emptySearch ||
     !launcherView ||
@@ -1031,12 +1244,27 @@ function getPopupElements(): PopupElements {
     !detailTitle ||
     !detailSubtitle ||
     !detailBackButton ||
+    !detailHeaderText ||
+    !connectorDetailActions ||
     !plannedTitle ||
     !plannedDescription ||
     !surfaceHint ||
     !catalogJsonExportButton ||
     !catalogCsvExportButton ||
     !catalogXlsxExportButton ||
+    !clientChartSyntheticConfirm ||
+    !clientChartSearchInput ||
+    !searchClientChartsButton ||
+    !clientChartRankLimit ||
+    !rankClientChartsButton ||
+    !clientChartSearchResults ||
+    !inspectClientChartButton ||
+    !downloadClientChartButton ||
+    !clientChartSummary ||
+    !clientChartPdfFiles ||
+    !parseClientChartPdfsButton ||
+    !downloadClientChartPdfJsonButton ||
+    !clientChartPdfSummary ||
     !employeeSearchInput ||
     !employeeStatusFilter ||
     !employeeRefreshButton ||
@@ -1082,6 +1310,7 @@ function getPopupElements(): PopupElements {
     refreshStatusButton,
     themeToggle,
     settingsButton,
+    homeButton,
     searchInput,
     emptySearch,
     launcherView,
@@ -1089,6 +1318,8 @@ function getPopupElements(): PopupElements {
     detailTitle,
     detailSubtitle,
     detailBackButton,
+    detailHeaderText,
+    connectorDetailActions,
     plannedTitle,
     plannedDescription,
     toolTiles,
@@ -1099,6 +1330,19 @@ function getPopupElements(): PopupElements {
     catalogJsonExportButton,
     catalogCsvExportButton,
     catalogXlsxExportButton,
+    clientChartSyntheticConfirm,
+    clientChartSearchInput,
+    searchClientChartsButton,
+    clientChartRankLimit,
+    rankClientChartsButton,
+    clientChartSearchResults,
+    inspectClientChartButton,
+    downloadClientChartButton,
+    clientChartSummary,
+    clientChartPdfFiles,
+    parseClientChartPdfsButton,
+    downloadClientChartPdfJsonButton,
+    clientChartPdfSummary,
     employeeSearchInput,
     employeeStatusFilter,
     employeeRefreshButton,
@@ -1129,6 +1373,383 @@ function getPopupElements(): PopupElements {
     preferencesReset,
     extensionVersion
   };
+}
+
+async function searchClientCharts(): Promise<void> {
+  await withResult(async () => {
+    if (!elements.clientChartSyntheticConfirm.checked) {
+      throw new Error("Confirm synthetic UAT data before searching for clients.");
+    }
+    const query = elements.clientChartSearchInput.value.trim();
+    if (query.length < 2) throw new Error("Enter at least two characters to search.");
+
+    elements.clientChartSearchInput.disabled = true;
+    elements.searchClientChartsButton.disabled = true;
+    elements.clientChartRankLimit.disabled = true;
+    elements.rankClientChartsButton.disabled = true;
+    setClientChartResultButtonsDisabled(true);
+    renderClientChartSearchResults(`Searching for “${query}”…`);
+    try {
+      const response = await sendRuntimeMessage<ClientChartSearchResponse>({
+        type: "ac/popup/search-client-charts",
+        payload: {
+          query,
+          confirmedSynthetic: elements.clientChartSyntheticConfirm.checked
+        }
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to search UAT clients.");
+      }
+
+      clientChartRankings.clear();
+      clientChartSearchResults = response.data.items;
+      renderClientChartSearchResults();
+      return response.data.items.length > 0
+        ? `Found ${response.data.items.length} matching synthetic UAT client${response.data.items.length === 1 ? "" : "s"}.`
+        : `No matching clients found for “${response.data.query}”.`;
+    } catch (error) {
+      clientChartSearchResults = [];
+      clientChartRankings.clear();
+      renderClientChartSearchResults(formatError(error));
+      throw error;
+    } finally {
+      const confirmed = elements.clientChartSyntheticConfirm.checked;
+      elements.clientChartSearchInput.disabled = !confirmed;
+      elements.clientChartRankLimit.disabled = !confirmed;
+      elements.rankClientChartsButton.disabled = !confirmed;
+      elements.searchClientChartsButton.disabled =
+        !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
+      setClientChartResultButtonsDisabled(!confirmed);
+    }
+  });
+}
+
+async function rankClientCharts(): Promise<void> {
+  await withResult(async () => {
+    if (!elements.clientChartSyntheticConfirm.checked) {
+      throw new Error("Confirm synthetic UAT data before ranking client charts.");
+    }
+    const limit = Number(elements.clientChartRankLimit.value) === 25 ? 25 : 10;
+    elements.clientChartSearchInput.disabled = true;
+    elements.searchClientChartsButton.disabled = true;
+    elements.clientChartRankLimit.disabled = true;
+    elements.rankClientChartsButton.disabled = true;
+    setClientChartResultButtonsDisabled(true);
+    renderClientChartSearchResults(
+      `Deep-scanning ${limit} candidate charts. This can take up to a minute…`
+    );
+    try {
+      const response = await sendRuntimeMessage<ClientChartRankResponse>({
+        type: "ac/popup/rank-client-charts",
+        payload: {
+          limit,
+          confirmedSynthetic: elements.clientChartSyntheticConfirm.checked
+        }
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to rank UAT client charts.");
+      }
+
+      clientChartSearchResults = response.data.items;
+      clientChartRankings = new Map(
+        response.data.items.map((result) => [result.clientId, result])
+      );
+      renderClientChartSearchResults();
+      return [
+        `Ranked ${response.data.deepScanned} deeply scanned charts from ${response.data.candidatePool} active UAT clients.`,
+        "Results are sorted by populated chart sections, then capped record counts."
+      ].join("\n");
+    } catch (error) {
+      clientChartSearchResults = [];
+      clientChartRankings.clear();
+      renderClientChartSearchResults(formatError(error));
+      throw error;
+    } finally {
+      const confirmed = elements.clientChartSyntheticConfirm.checked;
+      elements.clientChartSearchInput.disabled = !confirmed;
+      elements.clientChartRankLimit.disabled = !confirmed;
+      elements.rankClientChartsButton.disabled = !confirmed;
+      elements.searchClientChartsButton.disabled =
+        !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
+      setClientChartResultButtonsDisabled(!confirmed);
+    }
+  });
+}
+
+function getPersonInitials(fullName: string): string {
+  const initials = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+  return initials || "PT";
+}
+
+function getPersonStatusTone(
+  status?: string
+): "success" | "warning" | "danger" | "neutral" {
+  const normalizedStatus = status?.trim().toLowerCase() ?? "";
+  if (normalizedStatus === "active") {
+    return "success";
+  }
+  if (
+    normalizedStatus === "pending" ||
+    normalizedStatus === "applicant" ||
+    normalizedStatus === "on hold" ||
+    normalizedStatus === "on_hold"
+  ) {
+    return "warning";
+  }
+  if (["suspended", "terminated", "rejected"].includes(normalizedStatus)) {
+    return "danger";
+  }
+  return "neutral";
+}
+
+function renderClientChartSearchResults(message?: string): void {
+  elements.clientChartSearchResults.replaceChildren();
+  if (message || clientChartSearchResults.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = message ?? "No matching synthetic UAT clients found.";
+    elements.clientChartSearchResults.append(empty);
+    return;
+  }
+
+  for (const result of clientChartSearchResults) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chart-client-search-result";
+    button.setAttribute("aria-label", `Inspect chart for ${result.fullName}`);
+    button.addEventListener("click", () => {
+      void inspectActiveClientChart(result.clientId);
+    });
+
+    const header = document.createElement("span");
+    header.className = "chart-client-search-result__header";
+
+    const avatar = document.createElement("span");
+    avatar.className = "chart-client-search-result__avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = getPersonInitials(result.fullName);
+
+    const identity = document.createElement("span");
+    identity.className = "chart-client-search-result__identity";
+    const name = document.createElement("strong");
+    name.textContent = result.preferredName
+      ? `${result.fullName} (${result.preferredName})`
+      : result.fullName;
+    identity.append(name);
+
+    const status = document.createElement("span");
+    status.className = "chart-client-search-result__status";
+    status.dataset.tone = getPersonStatusTone(result.status);
+    status.textContent = result.status?.trim() || "Unknown";
+    header.append(avatar, identity, status);
+
+    const metadata = document.createElement("span");
+    metadata.className = "chart-client-search-result__metadata";
+    const metadataItems: Array<[string, string | undefined]> = [
+      ["AlayaCare ID", result.alayaCareId],
+      ["DOB", result.dateOfBirth],
+      ["Branch", result.branchName]
+    ];
+    for (const [label, value] of metadataItems) {
+      if (!value) {
+        continue;
+      }
+      const item = document.createElement("span");
+      item.className = "chart-client-search-result__metadata-item";
+      const itemLabel = document.createElement("span");
+      itemLabel.className = "chart-client-search-result__metadata-label";
+      itemLabel.textContent = label;
+      const itemValue = document.createElement("span");
+      itemValue.className = "chart-client-search-result__metadata-value";
+      itemValue.textContent = value;
+      item.append(itemLabel, itemValue);
+      metadata.append(item);
+    }
+
+    const ranking = clientChartRankings.get(result.clientId);
+    if (ranking) {
+      const score = document.createElement("span");
+      score.className = "chart-client-search-result__score";
+      const rankingItems: Array<[string, string]> = [
+        ["Coverage", `${ranking.populatedSections}/${ranking.totalSections}`],
+        ["Records", String(ranking.recordCount)],
+        ["Failures", String(ranking.failedSections)]
+      ];
+      for (const [label, value] of rankingItems) {
+        const item = document.createElement("span");
+        const itemValue = document.createElement("strong");
+        itemValue.textContent = value;
+        item.append(itemValue, ` ${label}`);
+        score.append(item);
+      }
+      button.append(header, metadata, score);
+    } else {
+      button.append(header, metadata);
+    }
+
+    const footer = document.createElement("span");
+    footer.className = "chart-client-search-result__footer";
+    const action = document.createElement("span");
+    action.className = "chart-client-search-result__action";
+    action.textContent = "Inspect chart";
+    const arrow = document.createElement("span");
+    arrow.className = "chart-client-search-result__arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.textContent = "→";
+    footer.append(action, arrow);
+    button.append(footer);
+    elements.clientChartSearchResults.append(button);
+  }
+}
+
+function setClientChartResultButtonsDisabled(disabled: boolean): void {
+  for (const button of elements.clientChartSearchResults.querySelectorAll<HTMLButtonElement>(
+    ".chart-client-search-result"
+  )) {
+    button.disabled = disabled;
+  }
+}
+
+async function inspectActiveClientChart(clientId?: number): Promise<void> {
+  await withResult(async () => {
+    elements.inspectClientChartButton.disabled = true;
+    elements.clientChartSearchInput.disabled = true;
+    elements.searchClientChartsButton.disabled = true;
+    elements.clientChartRankLimit.disabled = true;
+    elements.rankClientChartsButton.disabled = true;
+    setClientChartResultButtonsDisabled(true);
+    elements.downloadClientChartButton.disabled = true;
+    const selected = clientChartSearchResults.find((result) => result.clientId === clientId);
+    elements.clientChartSummary.textContent = selected
+      ? `Reading structured chart data for ${selected.fullName}\u2026`
+      : "Reading structured chart data for the active client\u2026";
+    try {
+      const response = await sendRuntimeMessage<ClientChartExportSnapshot>({
+        type: "ac/popup/export-active-client-chart",
+        payload: {
+          confirmedSynthetic: elements.clientChartSyntheticConfirm.checked,
+          ...(clientId ? { clientId } : {})
+        }
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to inspect the client chart.");
+      }
+
+      clientChartSnapshot = response.data;
+      elements.downloadClientChartButton.disabled = false;
+      elements.clientChartSummary.textContent = buildClientChartSummary(response.data);
+      return [
+        `Inspected ${response.data.client.fullName}.`,
+        `${response.data.counts.successful} of ${response.data.counts.sections} sections loaded.`,
+        "Review the summary, then download the local JSON snapshot."
+      ].join("\n");
+    } catch (error) {
+      clientChartSnapshot = null;
+      elements.clientChartSummary.textContent = formatError(error);
+      throw error;
+    } finally {
+      const confirmed = elements.clientChartSyntheticConfirm.checked;
+      elements.inspectClientChartButton.disabled = !confirmed;
+      elements.clientChartSearchInput.disabled = !confirmed;
+      elements.clientChartRankLimit.disabled = !confirmed;
+      elements.rankClientChartsButton.disabled = !confirmed;
+      elements.searchClientChartsButton.disabled =
+        !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
+      setClientChartResultButtonsDisabled(!confirmed);
+    }
+  });
+}
+
+function buildClientChartSummary(snapshot: ClientChartExportSnapshot): string {
+  const failedSections = Object.entries(snapshot.sections)
+    .filter(([, section]) => !section.ok)
+    .map(([name, section]) => `- ${name}: ${section.error ?? "request failed"}`);
+  return [
+    snapshot.client.fullName,
+    `Route ID: ${snapshot.client.routeId}`,
+    `Client ID: ${snapshot.client.id}`,
+    `GUID: ${snapshot.client.guid}`,
+    `Sections: ${snapshot.counts.successful}/${snapshot.counts.sections} successful`,
+    `Attachment binaries: not included`,
+    failedSections.length > 0 ? `\nSection failures:\n${failedSections.join("\n")}` : "\nNo section failures."
+  ].join("\n");
+}
+
+function downloadClientChartJson(snapshot: ClientChartExportSnapshot): void {
+  const tenant = safeTenantName(snapshot.tenantOrigin);
+  const client = safeFileNamePart(snapshot.client.fullName) || `client-${snapshot.client.id}`;
+  const date = snapshot.exportedAt.slice(0, 10);
+  const filename = `alayacare-client-chart-${tenant}-${client}-${date}.json`;
+  downloadFile(`${JSON.stringify(snapshot, null, 2)}\n`, "application/json", filename);
+}
+
+async function parseSelectedClientChartPdfs(): Promise<void> {
+  await withResult(async () => {
+    if (!elements.clientChartSyntheticConfirm.checked) {
+      throw new Error("Confirm that the selected PDFs contain synthetic UAT data.");
+    }
+    const files = Array.from(elements.clientChartPdfFiles.files ?? []);
+    if (files.length === 0) throw new Error("Choose at least one AlayaCare batch PDF.");
+
+    elements.parseClientChartPdfsButton.disabled = true;
+    elements.downloadClientChartPdfJsonButton.disabled = true;
+    elements.clientChartPdfSummary.textContent = "Loading the local PDF parser…";
+    try {
+      const { parseClientChartPdfBatch } = await import("../shared/clientChartPdf");
+      const snapshot = await parseClientChartPdfBatch(files, true, (progress) => {
+        elements.clientChartPdfSummary.textContent = [
+          `Parsing ${progress.fileName}`,
+          `File ${progress.fileIndex + 1}/${progress.fileCount}`,
+          `Page ${progress.pageNumber}/${progress.pageCount}`
+        ].join("\n");
+      });
+      clientChartPdfSnapshot = snapshot;
+      elements.downloadClientChartPdfJsonButton.disabled = false;
+      elements.clientChartPdfSummary.textContent = buildClientChartPdfSummary(snapshot);
+      return [
+        `Parsed ${snapshot.counts.files} local PDF${snapshot.counts.files === 1 ? "" : "s"}.`,
+        `Indexed ${snapshot.counts.pages} pages and ${snapshot.counts.visitDays} visit days.`,
+        "Review the summary, then download the parsed JSON."
+      ].join("\n");
+    } catch (error) {
+      clientChartPdfSnapshot = null;
+      elements.clientChartPdfSummary.textContent = formatError(error);
+      throw error;
+    } finally {
+      elements.parseClientChartPdfsButton.disabled =
+        !elements.clientChartSyntheticConfirm.checked ||
+        (elements.clientChartPdfFiles.files?.length ?? 0) === 0;
+    }
+  });
+}
+
+function buildClientChartPdfSummary(snapshot: ClientChartPdfParseSnapshot): string {
+  const fileSummaries = snapshot.files.map((file) => {
+    const name = file.identity.displayName ?? file.sourceFile.name;
+    const knownPages = file.pageCount - file.counts.byReportType.unknown;
+    return `- ${name}: ${file.pageCount} pages, ${knownPages} classified, ${file.counts.visitDays} visit days`;
+  });
+  return [
+    `Files: ${snapshot.counts.files}`,
+    `Pages: ${snapshot.counts.pages}`,
+    `Report groups: ${snapshot.counts.reports}`,
+    `Visit days: ${snapshot.counts.visitDays}`,
+    `Unique visit IDs: ${snapshot.counts.uniqueVisitIds}`,
+    "Processing: local only; no upload",
+    "",
+    ...fileSummaries
+  ].join("\n");
+}
+
+function downloadClientChartPdfJson(snapshot: ClientChartPdfParseSnapshot): void {
+  const date = snapshot.parsedAt.slice(0, 10);
+  const filename = `alayacare-client-chart-pdf-batch-${date}.json`;
+  downloadFile(`${JSON.stringify(snapshot, null, 2)}\n`, "application/json", filename);
 }
 
 async function exportFormContextCatalog(format: "json" | "csv" | "xlsx"): Promise<void> {
@@ -1230,6 +1851,14 @@ function safeTenantName(origin: string): string {
   } catch {
     return "tenant";
   }
+}
+
+function safeFileNamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 async function refreshStatus(): Promise<void> {

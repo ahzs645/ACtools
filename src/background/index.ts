@@ -2,6 +2,11 @@ import { getActiveTabId, sendMessageToTab } from "../shared/chrome";
 import { formatError } from "../shared/errors";
 import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
 import type {
+  ClientChartExportSnapshot,
+  ClientChartRankResponse,
+  ClientChartSearchResponse
+} from "../shared/clientChart";
+import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
   EmployeeCopyPlanResult,
@@ -12,6 +17,15 @@ import type {
   EmployeeWriteResult
 } from "../shared/employees";
 import type { EnvironmentHealth, EnvironmentRegistry } from "../shared/environments";
+import type {
+  ConnectorReferenceCatalog,
+  ConnectorScenarioBundle,
+  ConnectorScenarioBulkDownloadResult,
+  ConnectorScenarioHealth,
+  ConnectorScenarioListResult,
+  ConnectorScenarioSaveResult,
+  ConnectorScenarioSnapshot
+} from "../shared/connectorScenarios";
 import type {
   AvailabilityPostResult,
   CommandResult,
@@ -53,6 +67,16 @@ type PopupResponseData =
   | PageStatus
   | AvailabilityPostResult
   | AlayaCareFormContextCatalogSnapshot
+  | ClientChartExportSnapshot
+  | ClientChartSearchResponse
+  | ClientChartRankResponse
+  | ConnectorScenarioSnapshot
+  | ConnectorScenarioBundle
+  | ConnectorScenarioBulkDownloadResult
+  | ConnectorScenarioListResult
+  | ConnectorReferenceCatalog
+  | ConnectorScenarioHealth
+  | ConnectorScenarioSaveResult
   | EmployeeListResult
   | EmployeeDetail
   | EmployeeWriteResult
@@ -128,6 +152,53 @@ async function handlePopupMessage(
     case "ac/popup/export-form-context-catalog":
       return sendMessageToTab<AlayaCareFormContextCatalogSnapshot>(tabId, {
         type: "ac/content/export-form-context-catalog"
+      });
+    case "ac/popup/search-client-charts":
+      return sendMessageToTab<ClientChartSearchResponse>(tabId, {
+        type: "ac/content/search-client-charts",
+        payload: message.payload
+      });
+    case "ac/popup/rank-client-charts":
+      return sendMessageToTab<ClientChartRankResponse>(tabId, {
+        type: "ac/content/rank-client-charts",
+        payload: message.payload
+      });
+    case "ac/popup/export-active-client-chart":
+      return sendMessageToTab<ClientChartExportSnapshot>(tabId, {
+        type: "ac/content/export-active-client-chart",
+        payload: message.payload
+      });
+    case "ac/popup/get-connector-scenario":
+      return sendMessageToTab<ConnectorScenarioSnapshot>(tabId, {
+        type: "ac/content/get-connector-scenario",
+        payload: message.payload
+      });
+    case "ac/popup/list-connector-scenarios":
+      return sendMessageToTab<ConnectorScenarioListResult>(tabId, {
+        type: "ac/content/list-connector-scenarios"
+      });
+    case "ac/popup/export-connector-scenario-bundle":
+      return sendMessageToTab<ConnectorScenarioBundle>(tabId, {
+        type: "ac/content/export-connector-scenario-bundle",
+        payload: message.payload
+      });
+    case "ac/popup/download-all-connector-scenarios":
+      return sendMessageToTab<ConnectorScenarioBulkDownloadResult>(tabId, {
+        type: "ac/content/download-all-connector-scenarios"
+      });
+    case "ac/popup/get-connector-reference-catalog":
+      return sendMessageToTab<ConnectorReferenceCatalog>(tabId, {
+        type: "ac/content/get-connector-reference-catalog"
+      });
+    case "ac/popup/get-connector-scenario-health":
+      return sendMessageToTab<ConnectorScenarioHealth>(tabId, {
+        type: "ac/content/get-connector-scenario-health",
+        payload: message.payload
+      });
+    case "ac/popup/save-connector-scenario":
+      return sendMessageToTab<ConnectorScenarioSaveResult>(tabId, {
+        type: "ac/content/save-connector-scenario",
+        payload: message.payload
       });
     case "ac/popup/list-employees":
       return sendMessageToTab<EmployeeListResult>(tabId, {

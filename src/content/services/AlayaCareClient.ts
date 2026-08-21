@@ -8,9 +8,47 @@ import {
   buildAlayaCareFormContextCatalog,
   type AlayaCareFormContextCatalogSnapshot
 } from "../../shared/formContextCatalog";
+import {
+  ALAYACARE_CLIENT_CHART_EXPORT_KIND,
+  ALAYACARE_CLIENT_CHART_EXPORT_SCHEMA_VERSION,
+  readActiveClientRoute,
+  type ClientChartExportSnapshot,
+  type ClientChartRankedResult,
+  type ClientChartRankResponse,
+  type ClientChartSearchResponse,
+  type ClientChartSearchResult,
+  type ClientChartSection
+} from "../../shared/clientChart";
+import type {
+  ConnectorBlueprint,
+  ConnectorConnectionReference,
+  ConnectorDataStoreReference,
+  ConnectorDataStructureReference,
+  ConnectorFunctionReference,
+  ConnectorKeyReference,
+  ConnectorReferenceCatalog,
+  ConnectorScenarioHealth,
+  ConnectorScenarioRun,
+  ConnectorScenarioBundle,
+  ConnectorScenarioBulkDownloadResult,
+  ConnectorScenarioListItem,
+  ConnectorScenarioListResult,
+  ConnectorScenarioMetadata,
+  ConnectorScenarioSaveRequest,
+  ConnectorScenarioSaveResult,
+  ConnectorScenarioSnapshot,
+  ConnectorScenarioSource,
+  ConnectorTemplateReference,
+  ConnectorWebhookReference
+} from "../../shared/connectorScenarios";
+import { summarizeConnectorBlueprint, validateConnectorBlueprint } from "../../shared/connectorScenarios";
+import { strToU8, zipSync } from "fflate";
 import { buildDailyRrule, getLocalDayUtcRange, minutesBetween } from "../utils/time";
 
 interface StoreConfigResponse {
+  currentBranch?: {
+    id?: number | string;
+  };
   current_user?: {
     id?: number;
     first_name?: string;
@@ -40,6 +78,64 @@ interface PagedResponse<T> {
   items?: T[];
 }
 
+interface ClientChartOverviewRecord extends Record<string, unknown> {
+  id?: number;
+  guid?: number;
+  profile_id?: number;
+  branch_id?: number;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  preferred_name?: string;
+  status?: string;
+  external_id?: string | null;
+}
+
+interface ClientSearchAssociate {
+  entity_id?: number;
+  guid_to?: number;
+  profile_id?: number;
+  subtype?: string;
+}
+
+interface ClientSearchApiItem {
+  demographics?: Record<string, unknown>;
+  patient_status?: string;
+  profile_id?: number;
+  branch_name?: string;
+  associates?: ClientSearchAssociate[];
+  client_groups?: Array<{ name?: string }>;
+}
+
+interface ClientSearchApiResponse {
+  count?: number;
+  items?: ClientSearchApiItem[];
+}
+
+interface ClientListApiItem {
+  id?: number;
+  guid?: number;
+  branch_id?: number;
+  first_name?: string;
+  last_name?: string;
+  preferred_name?: string;
+  birthday?: string;
+  status?: string;
+  external_id?: string | null;
+  emergency_response_level?: string;
+  address?: string;
+  phone_main?: string;
+  phone_personal?: string;
+  phone_other?: string;
+  groups?: string[];
+  tags_v2?: string[];
+}
+
+interface ClientListApiResponse {
+  count?: number;
+  items?: ClientListApiItem[];
+}
+
 interface ScheduleRecord {
   duration?: number;
   rrule?: string;
@@ -49,6 +145,53 @@ interface ScheduleRecord {
   availability_type?: {
     name?: string;
   };
+}
+
+interface ConnectorScenarioApiRecord {
+  id?: number;
+  name?: string;
+  teamId?: number;
+  description?: string;
+  folderId?: number | null;
+  concept?: boolean;
+  isPaused?: boolean;
+  isActive?: boolean;
+  iswaiting?: boolean;
+  scheduling?: unknown;
+  nextExec?: string;
+  dlqCount?: number | string;
+  allDlqCount?: number | string;
+  created?: string;
+  lastEdit?: string;
+  usedPackages?: string[];
+  isinvalid?: boolean;
+  islocked?: boolean;
+  operations?: number | string;
+  transfer?: number | string;
+}
+
+interface ConnectorScenarioApiResponse {
+  scenario?: ConnectorScenarioApiRecord;
+}
+
+interface ConnectorBlueprintApiResponse {
+  blueprint?: ConnectorBlueprint | null;
+  scheduling?: unknown;
+  metadata?: unknown;
+  idSequence?: number;
+  last_edit?: string;
+}
+
+interface ConnectorTeamApiResponse {
+  team?: {
+    id?: number;
+    name?: string;
+    organizationId?: number;
+  };
+}
+
+interface ConnectorScenarioListApiResponse {
+  scenarios?: ConnectorScenarioApiRecord[];
 }
 
 export interface ClientRecord {
@@ -87,6 +230,26 @@ export class AlayaCareClient {
   private userContextPromise: Promise<UserContext> | null = null;
 
   async getStatus(): Promise<PageStatus> {
+    if (window.location.hostname.toLowerCase().startsWith("connector.")) {
+      try {
+        const teamMatch = /^\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+        const probeUrl = teamMatch
+          ? `/api/v2/teams/${Number(teamMatch[1])}`
+          : "/api/v2/users/me?cols%5B0%5D=id&cols%5B1%5D=name";
+        await this.fetchConnectorJson<unknown>(probeUrl);
+        return {
+          ready: true,
+          location: window.location.origin
+        };
+      } catch {
+        return {
+          ready: false,
+          location: window.location.origin,
+          reason: "Connector is open, but the current browser session could not be verified."
+        };
+      }
+    }
+
     try {
       const config = await this.fetchJson<StoreConfigResponse>("/app/storeConfig");
       const firstName = config.current_user?.first_name?.trim() ?? "";
@@ -191,6 +354,633 @@ export class AlayaCareClient {
     });
   }
 
+  async searchClientCharts(
+    query: string,
+    confirmedSynthetic: boolean
+  ): Promise<ClientChartSearchResponse> {
+    this.assertSyntheticUatClientChartAccess(confirmedSynthetic);
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
+      throw new Error("Enter at least two characters to search for a synthetic UAT client.");
+    }
+    if (normalizedQuery.length > 100) {
+      throw new Error("Client search is limited to 100 characters.");
+    }
+
+    const source = withRepeatedQuery("/api/v1/patients/contacts/autocomplete", [
+      ["count", "20"],
+      ["is_enabled", "true"],
+      ["term", normalizedQuery],
+      ["subtype", "GtAccount"],
+      ["subtype", "CustomerAccount"],
+      ["profile_type", "all"]
+    ]);
+    const response = await this.fetchJson<ClientSearchApiResponse>(source);
+    const byClientId = new Map<number, ClientChartSearchResult>();
+    for (const item of response.items ?? []) {
+      const associate = item.associates?.find((candidate) =>
+        candidate.subtype === "GtAccount" || candidate.subtype === "CustomerAccount"
+      );
+      if (!associate) continue;
+      const clientId = readPositiveInteger(associate?.entity_id);
+      const guid = readPositiveInteger(associate?.guid_to);
+      if (!clientId || !guid || byClientId.has(clientId)) continue;
+
+      const demographics = item.demographics ?? {};
+      const firstName = readNonEmptyString(demographics.first_name);
+      const lastName = readNonEmptyString(demographics.last_name);
+      const fullName = [firstName, lastName].filter(Boolean).join(" ") || `Client ${clientId}`;
+      byClientId.set(clientId, {
+        clientId,
+        routeId: clientId.toString(36),
+        guid,
+        profileId:
+          readPositiveInteger(associate.profile_id) ?? readPositiveInteger(item.profile_id),
+        fullName,
+        preferredName: readNonEmptyString(demographics.preferred_name),
+        status: readNonEmptyString(item.patient_status),
+        alayaCareId: `AC${String(guid).padStart(9, "0")}`,
+        dateOfBirth: readNonEmptyString(demographics.birthday),
+        branchName: readNonEmptyString(item.branch_name),
+        clientGroups: (item.client_groups ?? [])
+          .map((group) => readNonEmptyString(group.name))
+          .filter((name): name is string => Boolean(name))
+      });
+    }
+
+    return {
+      query: normalizedQuery,
+      total: response.count ?? byClientId.size,
+      items: [...byClientId.values()]
+    };
+  }
+
+  async rankClientCharts(
+    limit: 10 | 25,
+    confirmedSynthetic: boolean
+  ): Promise<ClientChartRankResponse> {
+    this.assertSyntheticUatClientChartAccess(confirmedSynthetic);
+    if (limit !== 10 && limit !== 25) {
+      throw new Error("Chart ranking is limited to 10 or 25 deep-scan candidates.");
+    }
+
+    const config = await this.fetchJson<StoreConfigResponse>("/app/storeConfig");
+    const branchId = readPositiveInteger(config.currentBranch?.id);
+    if (!branchId) throw new Error("Unable to determine the current AlayaCare branch.");
+
+    const source = withQuery("/api/v1/patients/clients/list", {
+      page: "1",
+      count: "200",
+      asc: "true",
+      order: "last_name",
+      full_text: "",
+      filter_type: "0",
+      client_statuses: "active",
+      include_children_branches: "true",
+      active: "false",
+      branch_id: String(branchId)
+    });
+    const response = await this.fetchJson<ClientListApiResponse>(source);
+    const candidates = (response.items ?? [])
+      .map((item) => ({ item, result: clientListItemToSearchResult(item) }))
+      .filter(
+        (candidate): candidate is { item: ClientListApiItem; result: ClientChartSearchResult } =>
+          candidate.result !== null
+      )
+      .sort(
+        (left, right) =>
+          metadataCandidateScore(right.item) - metadataCandidateScore(left.item) ||
+          right.result.clientId - left.result.clientId
+      )
+      .slice(0, limit);
+
+    const ranked = await mapWithConcurrency(candidates, 2, async (candidate) => {
+      try {
+        const sections: Record<string, ClientChartSection> = {};
+        await Promise.all(
+          buildClientChartScoreRequests(
+            candidate.result.clientId,
+            candidate.result.guid,
+            branchId
+          ).map(async ([name, sectionSource]) => {
+            sections[name] = await this.fetchClientChartSection(sectionSource, 7_000);
+          })
+        );
+        return { ...candidate.result, ...scoreClientChartSections(sections) } satisfies ClientChartRankedResult;
+      } catch {
+        return {
+          ...candidate.result,
+          fullnessScore: 0,
+          populatedSections: 0,
+          totalSections: SCORABLE_CLIENT_CHART_SECTIONS.length,
+          recordCount: 0,
+          failedSections: SCORABLE_CLIENT_CHART_SECTIONS.length
+        } satisfies ClientChartRankedResult;
+      }
+    });
+    ranked.sort(
+      (left, right) =>
+        right.fullnessScore - left.fullnessScore ||
+        left.fullName.localeCompare(right.fullName)
+    );
+
+    return {
+      candidatePool: response.count ?? response.items?.length ?? 0,
+      deepScanned: ranked.length,
+      items: ranked,
+      methodology:
+        "Active clients are preselected by lightweight list metadata, then ranked by populated patient-chart sections and capped record counts."
+    };
+  }
+
+  async exportActiveClientChart(
+    confirmedSynthetic: boolean,
+    requestedClientId?: number
+  ): Promise<ClientChartExportSnapshot> {
+    this.assertSyntheticUatClientChartAccess(confirmedSynthetic);
+    const requestedId = readPositiveInteger(requestedClientId);
+    const route = requestedId
+      ? { clientId: requestedId, routeId: requestedId.toString(36) }
+      : readActiveClientRoute(window.location.hash);
+    if (!route) {
+      throw new Error("Open a client chart or select a synthetic UAT client from search first.");
+    }
+
+    const sourceUrl = requestedId
+      ? `${window.location.origin}/#/clients/${route.routeId}/overview`
+      : window.location.href;
+
+    const overviewSource = `/api/v1/patients/${route.clientId}`;
+    const overview = await this.fetchJson<ClientChartOverviewRecord>(overviewSource);
+    const clientId = readPositiveInteger(overview.id) ?? route.clientId;
+    const guid = readPositiveInteger(overview.guid);
+    if (!guid) {
+      throw new Error("The active client record did not include a usable client GUID.");
+    }
+
+    const branchId = readPositiveInteger(overview.branch_id);
+    const profileId = readPositiveInteger(overview.profile_id);
+    const composedName = [
+      readNonEmptyString(overview.first_name),
+      readNonEmptyString(overview.last_name)
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const fullName = (readNonEmptyString(overview.full_name) ?? composedName) || `Client ${clientId}`;
+    const sections: Record<string, ClientChartSection> = {
+      overview: { source: overviewSource, ok: true, status: 200, data: overview }
+    };
+
+    const requests: Array<[string, string]> = [
+      ["demographics", `/api/v1/patients/${clientId}/demographics`],
+      [
+        "medicalHistory",
+        `/api/v1/clinical/documents?type=medical_history&account_id=${clientId}`
+      ],
+      [
+        "riskAssessment",
+        `/api/v1/clinical/documents?type=risk_assessment&account_id=${clientId}`
+      ],
+      [
+        "contacts",
+        withQuery("/api/v1/patients/contacts/", {
+          is_active: "true",
+          guid_to: String(guid),
+          enable_fp_info: "true",
+          count: "100",
+          page: "1"
+        })
+      ],
+      [
+        "clientNotes",
+        withQuery(`/api/v1/patients/clients/${clientId}/client-notes`, {
+          count: "100",
+          page: "1",
+          sort_by: "created_at",
+          sort_order: "desc",
+          "status[]": "active"
+        })
+      ],
+      [
+        "careProviderNotes",
+        withQuery(`/api/v1/patients/clients/${clientId}/care-provider-notes`, {
+          count: "100",
+          page: "1",
+          include: "category",
+          sort_by: "updated_at",
+          sort_order: "desc",
+          is_archived: "false"
+        })
+      ],
+      [
+        "progressNotes",
+        withQuery(`/api/v3/clinical/clients/${clientId}/progress_notes`, {
+          clientId: String(clientId),
+          count: "100",
+          page: "1",
+          archived: "false",
+          sort_by: "created_at",
+          sort_order: "desc",
+          include: "author"
+        })
+      ],
+      [
+        "services",
+        withQuery("/api/v1/scheduler/services", {
+          "excluded_status[]": "discharged",
+          count: "100",
+          page: "1",
+          service_extended: "1",
+          include_disabled: "true",
+          client_id: String(clientId),
+          form_context_fields: "true",
+          funder_details: "true",
+          include_last_active_budget: "true"
+        })
+      ],
+      [
+        "carePlans",
+        withRepeatedQuery(`/api/v1/clinical/client/${clientId}/careplans`, [
+          ["count", "100"],
+          ["page", "1"],
+          ["sort_by", "updated_at"],
+          ["order", "desc"],
+          ["include_set", "minimal"],
+          ["include", "users_snapshots"],
+          ["include", "_links"]
+        ])
+      ],
+      [
+        "clientForms",
+        withQuery("/api/v1/tasks/forms20/submissions", {
+          include_draft_status: "true",
+          count: "100",
+          page: "1",
+          sort_by: "id",
+          asc: "false",
+          account_id: String(clientId),
+          date_type: "created_on"
+        })
+      ],
+      [
+        "documentApprovals",
+        withQuery("/api/v1/clinical/document_approval", {
+          client_id: String(clientId),
+          sort_by: "created_at",
+          count: "100",
+          sort_order: "desc",
+          page: "1"
+        })
+      ],
+      [
+        "medications",
+        withRepeatedQuery(`/api/v3/clinical/clients/${clientId}/medications`, [
+          ["include", "cms_485_status"],
+          ["include", "status_reason"],
+          ["count", "100"],
+          ["page", "1"]
+        ])
+      ],
+      ["attachmentMetadata", `/api/v3/files/${clientId}/`],
+      [
+        "visitAttachmentMetadata",
+        withQuery("/api/v1/scheduler/visit_attachments", { client_id: String(clientId) })
+      ]
+    ];
+
+    if (branchId) {
+      requests.push([
+        "patientFieldSchema",
+        withQuery("/api/v1/agency/form-context/schema/Patient", {
+          branch_id: String(branchId)
+        })
+      ]);
+      requests.push([
+        "openTasks",
+        withRepeatedQuery("/api/v2/tasks/tasks", [
+          ["page", "1"],
+          ["count", "100"],
+          ["sort", "due_at_ascending"],
+          ["branch_id", String(branchId)],
+          ["include_total_pages", "true"],
+          ["statuses", "1"],
+          ["statuses", "3"],
+          ["statuses", "8"],
+          ["contexts", `include,api.patients.client,${clientId}`]
+        ])
+      ]);
+    }
+
+    await Promise.all(
+      requests.map(async ([name, source]) => {
+        sections[name] = await this.fetchClientChartSection(source);
+      })
+    );
+
+    const carePlanItems = readItems(sections.carePlans.data);
+    if (carePlanItems.length > 0) {
+      const details = await Promise.all(
+        carePlanItems.flatMap((item) => {
+          const carePlanId = readPositiveInteger(item.id);
+          if (!carePlanId) return [];
+          const source = withRepeatedQuery(`/api/v1/clinical/careplan/${carePlanId}`, [
+            ["statuses", "completed"],
+            ["statuses", "active"],
+            ["include", "_links"],
+            ["include", "versions"],
+            ["include", "module_extra"],
+            ["include", "users_snapshots"],
+            ["include_set", "minimal"]
+          ]);
+          return [this.fetchClientChartSection(source)];
+        })
+      );
+      sections.carePlanDetails = {
+        source: "/api/v1/clinical/careplan/{carePlanId}",
+        ok: details.every((detail) => detail.ok),
+        data: details,
+        error: details.some((detail) => !detail.ok)
+          ? "One or more care-plan detail requests failed."
+          : undefined
+      };
+    }
+
+    const sectionValues = Object.values(sections);
+    const successful = sectionValues.filter((section) => section.ok).length;
+    return {
+      kind: ALAYACARE_CLIENT_CHART_EXPORT_KIND,
+      schemaVersion: ALAYACARE_CLIENT_CHART_EXPORT_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      sourceUrl,
+      client: {
+        routeId: route.routeId,
+        id: clientId,
+        guid,
+        profileId,
+        branchId,
+        fullName,
+        preferredName: readNonEmptyString(overview.preferred_name),
+        status: readNonEmptyString(overview.status),
+        externalId:
+          typeof overview.external_id === "string" || overview.external_id === null
+            ? overview.external_id
+            : undefined
+      },
+      scope: {
+        uatOnly: true,
+        attachmentBinariesIncluded: false
+      },
+      sections,
+      counts: {
+        sections: sectionValues.length,
+        successful,
+        failed: sectionValues.length - successful
+      }
+    };
+  }
+
+  async listConnectorScenarios(): Promise<ConnectorScenarioListResult> {
+    const context = await this.getConnectorTeamContext();
+    const response = await this.fetchConnectorJson<ConnectorScenarioListApiResponse>(
+      `/api/v2/scenarios?teamId=${context.teamId}&pg%5Blimit%5D=10000`
+    );
+    const scenarios = (response.scenarios ?? [])
+      .map((record) => this.buildConnectorScenarioListItem(context, record))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return {
+      ...context,
+      activeScenarioId: this.getActiveConnectorScenarioId(),
+      scenarios
+    };
+  }
+
+  async getConnectorScenario(
+    source: ConnectorScenarioSource,
+    scenarioId?: number
+  ): Promise<ConnectorScenarioSnapshot> {
+    const route = await this.getConnectorScenarioRoute(scenarioId);
+    const [scenarioResponse, requestedBlueprintResponse] = await Promise.all([
+      this.fetchConnectorJson<ConnectorScenarioApiResponse>(`/api/v2/scenarios/${route.scenarioId}`),
+      this.fetchConnectorJson<ConnectorBlueprintApiResponse>(
+        `/api/v2/scenarios/${route.scenarioId}/blueprint${source === "draft" ? "?draft=true" : ""}`
+      )
+    ]);
+
+    const scenarioRecord = scenarioResponse.scenario;
+    const serverDraftAvailable = source === "draft" && Boolean(requestedBlueprintResponse.blueprint);
+    const blueprintResponse =
+      source === "draft" && !requestedBlueprintResponse.blueprint
+        ? await this.fetchConnectorJson<ConnectorBlueprintApiResponse>(
+            `/api/v2/scenarios/${route.scenarioId}/blueprint`
+          )
+        : requestedBlueprintResponse;
+    const blueprint = blueprintResponse.blueprint;
+    if (!scenarioRecord || !blueprint) {
+      throw new Error(`Connector did not return a ${source} blueprint for scenario ${route.scenarioId}.`);
+    }
+
+    const validation = validateConnectorBlueprint(blueprint);
+    if (!validation.valid) {
+      throw new Error(`Connector returned an invalid blueprint: ${validation.errors.join(" ")}`);
+    }
+
+    const scenario = this.buildConnectorScenarioMetadata(route, scenarioRecord);
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      sourceUrl: window.location.href,
+      scenarioId: route.scenarioId,
+      teamId: route.teamId,
+      source,
+      serverDraftAvailable,
+      scenario,
+      blueprint,
+      scheduling: blueprintResponse.scheduling,
+      scenarioMetadata: blueprintResponse.metadata,
+      idSequence: blueprintResponse.idSequence,
+      lastEdit: blueprintResponse.last_edit ?? scenario.lastEdit,
+      summary: summarizeConnectorBlueprint(blueprint, scenario.usedPackages)
+    };
+  }
+
+  async exportConnectorScenarioBundle(scenarioId?: number): Promise<ConnectorScenarioBundle> {
+    const [published, draft] = await Promise.all([
+      this.getConnectorScenario("published", scenarioId),
+      this.getConnectorScenario("draft", scenarioId)
+    ]);
+
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      sourceUrl: window.location.href,
+      scenarioId: draft.scenarioId,
+      teamId: draft.teamId,
+      scenario: draft.scenario,
+      published,
+      draft
+    };
+  }
+
+  async downloadAllConnectorScenarios(): Promise<ConnectorScenarioBulkDownloadResult> {
+    const list = await this.listConnectorScenarios();
+    const files: Record<string, Uint8Array> = {};
+    const failures: Array<{ scenarioId: number; name: string; error: string }> = [];
+    const downloaded: Array<{
+      scenarioId: number;
+      name: string;
+      path: string;
+      draftAvailable: boolean;
+    }> = [];
+
+    await mapWithConcurrency(list.scenarios, 3, async (scenario) => {
+      const path = `${String(scenario.id).padStart(6, "0")}-${safeFilePart(scenario.name)}`;
+      try {
+        const bundle = await this.exportConnectorScenarioBundle(scenario.id);
+        files[`${path}/published.json`] = jsonBytes(bundle.published);
+        files[`${path}/draft.json`] = jsonBytes(bundle.draft);
+        files[`${path}/bundle.json`] = jsonBytes(bundle);
+        downloaded.push({
+          scenarioId: scenario.id,
+          name: scenario.name,
+          path,
+          draftAvailable: bundle.draft.serverDraftAvailable
+        });
+      } catch (error) {
+        failures.push({
+          scenarioId: scenario.id,
+          name: scenario.name,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+
+    const exportedAt = new Date().toISOString();
+    files["manifest.json"] = jsonBytes({
+      schemaVersion: 1,
+      exportedAt,
+      tenantOrigin: window.location.origin,
+      teamId: list.teamId,
+      teamName: list.teamName,
+      scenarioCount: downloaded.length,
+      failedCount: failures.length,
+      scenarios: downloaded.sort((left, right) => left.scenarioId - right.scenarioId),
+      failures
+    });
+
+    const filename = `connector-team-${list.teamId}-scenarios-${exportedAt.slice(0, 10)}.zip`;
+    downloadBrowserFile(zipSync(files, { level: 6 }), "application/zip", filename);
+    return {
+      filename,
+      scenarioCount: downloaded.length,
+      failedCount: failures.length,
+      failures
+    };
+  }
+
+  async getConnectorReferenceCatalog(): Promise<ConnectorReferenceCatalog> {
+    const context = await this.getConnectorTeamContext();
+    const [templateResponse, connectionResponse, webhookResponse, functionResponse, keyResponse, dataStoreResponse, dataStructureResponse] = await Promise.all([
+      this.fetchConnectorJson<Record<string, unknown>>(
+        "/api/v2/templates/public?includeEn=true&pg%5Blimit%5D=10000&pg%5BreturnTotalCount%5D=true"
+      ),
+      this.fetchConnectorJson<Record<string, unknown>>(`/api/v2/connections?teamId=${context.teamId}`),
+      this.fetchConnectorJson<Record<string, unknown>>(
+        `/api/v2/hooks?teamId=${context.teamId}&pg%5Blimit%5D=9999`
+      ),
+      this.fetchConnectorJson<Record<string, unknown>>(`/api/v2/functions?teamId=${context.teamId}`),
+      this.fetchConnectorJson<Record<string, unknown>>(
+        `/api/v2/keys?teamId=${context.teamId}&cols%5B0%5D=id&cols%5B1%5D=name&cols%5B2%5D=packageName&cols%5B3%5D=theme&cols%5B4%5D=typeName`
+      ),
+      this.fetchConnectorJson<Record<string, unknown>>(
+        `/api/v2/data-stores?teamId=${context.teamId}&cols%5B0%5D=id&cols%5B1%5D=maxSize&cols%5B2%5D=name&cols%5B3%5D=records&cols%5B4%5D=size&cols%5B5%5D=teamId&cols%5B6%5D=datastructureId`
+      ),
+      this.fetchConnectorJson<Record<string, unknown>>(`/api/v2/data-structures?teamId=${context.teamId}`)
+    ]);
+
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      teamId: context.teamId,
+      organizationId: context.organizationId,
+      templates: readRecordArray(templateResponse.templatesPublic).map(toTemplateReference),
+      connections: readRecordArray(connectionResponse.connections).map(toConnectionReference),
+      webhooks: readRecordArray(webhookResponse.hooks).map(toWebhookReference),
+      functions: readRecordArray(functionResponse.functions).map(toFunctionReference),
+      keys: readRecordArray(keyResponse.keys).map(toKeyReference),
+      dataStores: readRecordArray(dataStoreResponse.dataStores).map(toDataStoreReference),
+      dataStructures: readRecordArray(dataStructureResponse.dataStructures).map(toDataStructureReference)
+    };
+  }
+
+  async getConnectorScenarioHealth(scenarioId: number): Promise<ConnectorScenarioHealth> {
+    const context = await this.getConnectorTeamContext();
+    const [scenarioResponse, listResponse, logResponse, dlqResponse] = await Promise.all([
+      this.fetchConnectorJson<ConnectorScenarioApiResponse>(`/api/v2/scenarios/${scenarioId}`),
+      this.fetchConnectorJson<ConnectorScenarioListApiResponse>(
+        `/api/v2/scenarios?teamId=${context.teamId}&pg%5Blimit%5D=10000`
+      ),
+      this.fetchConnectorJson<Record<string, unknown>>(
+        `/api/v2/scenarios/${scenarioId}/logs?showCheckRuns=true&showChangeLog=true`
+      ).catch(() => ({} as Record<string, unknown>)),
+      this.fetchConnectorJson<Record<string, unknown>>(`/api/v2/dlqs?scenarioId=${scenarioId}`).catch(
+        () => ({} as Record<string, unknown>)
+      )
+    ]);
+    const detailRecord = scenarioResponse.scenario;
+    if (!detailRecord) {
+      throw new Error(`Connector did not return scenario ${scenarioId}.`);
+    }
+    const listRecord = listResponse.scenarios?.find((candidate) => candidate.id === scenarioId);
+    const scenarioRecord = { ...detailRecord, ...listRecord };
+    const scenario = this.buildConnectorScenarioListItem(context, scenarioRecord);
+    const dlqs = readRecordArray(dlqResponse.dlqs);
+    const runs = readRecordArray(logResponse.scenarioLogs).map(toScenarioRun);
+    return {
+      schemaVersion: 1,
+      checkedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      teamId: context.teamId,
+      scenario,
+      incompleteExecutionCount: scenario.allDlqCount ?? scenario.dlqCount ?? dlqs.length,
+      runs,
+      historyUrl: `${window.location.origin}/${context.teamId}/scenarios/${scenarioId}/logs?showCheckRuns=true&showChangeLog=true`
+    };
+  }
+
+  async saveConnectorScenario(request: ConnectorScenarioSaveRequest): Promise<ConnectorScenarioSaveResult> {
+    const route = await this.getConnectorScenarioRoute(request.scenarioId);
+    const validation = validateConnectorBlueprint(request.blueprint);
+    if (!validation.valid) {
+      throw new Error(`Save blocked by blueprint validation: ${validation.errors.join(" ")}`);
+    }
+
+    if (request.expectedLastEdit) {
+      const currentDraft = await this.getConnectorScenario("draft", route.scenarioId);
+      if (currentDraft.lastEdit && currentDraft.lastEdit !== request.expectedLastEdit) {
+        throw new Error(
+          "The Connector scenario changed after it was loaded. Reload the draft and reapply your changes before saving."
+        );
+      }
+    }
+
+    await this.fetchConnectorJson<unknown>(`/api/v2/scenarios/${route.scenarioId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ blueprint: JSON.stringify(request.blueprint) })
+    });
+
+    const snapshot = await this.getConnectorScenario("draft", route.scenarioId);
+    return {
+      scenarioId: route.scenarioId,
+      savedAt: new Date().toISOString(),
+      snapshot
+    };
+  }
+
   async postAvailability(draft: AvailabilityDraft): Promise<AvailabilityPostResult> {
     const uri = `/api/v2/employees/employee/${draft.employeeId}/availabilities`;
     const payload = {
@@ -248,6 +1038,15 @@ export class AlayaCareClient {
     return response.items ?? [];
   }
 
+  private assertSyntheticUatClientChartAccess(confirmedSynthetic: boolean): void {
+    if (!window.location.hostname.toLowerCase().includes(".uat.alayacare.")) {
+      throw new Error("Client Chart Export is currently limited to AlayaCare UAT tenants.");
+    }
+    if (!confirmedSynthetic) {
+      throw new Error("Confirm that the UAT client is synthetic or a test record first.");
+    }
+  }
+
   private async fetchJson<T>(url: string): Promise<T> {
     const response = await fetch(url, { credentials: "include" });
 
@@ -256,6 +1055,155 @@ export class AlayaCareClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  private async fetchClientChartSection(
+    source: string,
+    timeoutMs?: number
+  ): Promise<ClientChartSection> {
+    const controller = timeoutMs ? new AbortController() : undefined;
+    const timeout = controller
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : undefined;
+    try {
+      const response = await fetch(source, {
+        credentials: "include",
+        headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
+        signal: controller?.signal
+      });
+      const data = await parseResponseBody(response);
+      if (!response.ok) {
+        return {
+          source,
+          ok: false,
+          status: response.status,
+          error: `Request failed (${response.status}).`,
+          data
+        };
+      }
+      return { source, ok: true, status: response.status, data };
+    } catch (error) {
+      return {
+        source,
+        ok: false,
+        error: controller?.signal.aborted
+          ? `Request timed out after ${timeoutMs} ms.`
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      };
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    }
+  }
+
+  private async fetchConnectorJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(init.headers);
+    headers.set("Accept", "application/json");
+    headers.set("imt-web-zone", "production");
+    if (init.body !== undefined) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const response = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers
+    });
+    const body = await parseResponseBody(response);
+
+    if (!response.ok) {
+      const detail = getConnectorErrorDetail(body);
+      throw new Error(`Connector request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    }
+
+    return unwrapConnectorResponse(body) as T;
+  }
+
+  private getConnectorTeamId(): number {
+    const hostname = window.location.hostname.toLowerCase();
+    if (!hostname.startsWith("connector.") || !hostname.includes(".alayacare.")) {
+      throw new Error("Open connector.alayacare.ca before using Connector Utilities.");
+    }
+
+    const match = /^\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+    if (!match) {
+      throw new Error("Open a team page in Connector before using team utilities.");
+    }
+
+    return Number(match[1]);
+  }
+
+  private getActiveConnectorScenarioId(): number | undefined {
+    const match = /^\/\d+\/scenarios\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+    return match ? Number(match[1]) : undefined;
+  }
+
+  private getConnectorScenarioRoute(scenarioId?: number): { scenarioId: number; teamId: number } {
+    const resolvedScenarioId = scenarioId ?? this.getActiveConnectorScenarioId();
+    if (!resolvedScenarioId) {
+      throw new Error("Select a scenario or open a Connector scenario editor page first.");
+    }
+
+    return {
+      teamId: this.getConnectorTeamId(),
+      scenarioId: resolvedScenarioId
+    };
+  }
+
+  private async getConnectorTeamContext(): Promise<{
+    teamId: number;
+    teamName?: string;
+    organizationId?: number;
+  }> {
+    const teamId = this.getConnectorTeamId();
+    const response = await this.fetchConnectorJson<ConnectorTeamApiResponse>(`/api/v2/teams/${teamId}`);
+    return {
+      teamId,
+      teamName: response.team?.name,
+      organizationId: response.team?.organizationId
+    };
+  }
+
+  private buildConnectorScenarioMetadata(
+    route: { scenarioId: number; teamId: number },
+    record: ConnectorScenarioApiRecord
+  ): ConnectorScenarioMetadata {
+    return {
+      id: record.id ?? route.scenarioId,
+      name: record.name?.trim() || `Scenario ${route.scenarioId}`,
+      teamId: record.teamId ?? route.teamId,
+      description: record.description,
+      folderId: record.folderId,
+      concept: record.concept,
+      isPaused: record.isPaused,
+      isActive: record.isActive,
+      created: record.created,
+      lastEdit: record.lastEdit,
+      usedPackages: Array.isArray(record.usedPackages) ? record.usedPackages.slice().sort() : []
+    };
+  }
+
+  private buildConnectorScenarioListItem(
+    context: { teamId: number },
+    record: ConnectorScenarioApiRecord
+  ): ConnectorScenarioListItem {
+    const metadata = this.buildConnectorScenarioMetadata(
+      { scenarioId: record.id ?? 0, teamId: context.teamId },
+      record
+    );
+    return {
+      ...metadata,
+      isInvalid: record.isinvalid,
+      isLocked: record.islocked,
+      isWaiting: record.iswaiting,
+      scheduling: record.scheduling,
+      nextExec: record.nextExec,
+      dlqCount: toOptionalNumber(record.dlqCount),
+      allDlqCount: toOptionalNumber(record.allDlqCount),
+      operations: toOptionalNumber(record.operations),
+      transfer: toOptionalNumber(record.transfer)
+    };
   }
 
   private async loadUserContext(): Promise<UserContext> {
@@ -309,6 +1257,264 @@ function compareEmployees(
   return leftFirstName.localeCompare(rightFirstName);
 }
 
+function withQuery(path: string, values: Record<string, string>): string {
+  return withRepeatedQuery(path, Object.entries(values));
+}
+
+function withRepeatedQuery(path: string, values: Array<[string, string]>): string {
+  const params = new URLSearchParams();
+  values.forEach(([key, value]) => params.append(key, value));
+  return `${path}?${params.toString()}`;
+}
+
+function readPositiveInteger(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readItems(value: unknown): Record<string, unknown>[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items)
+    ? items.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object" && !Array.isArray(item)
+      )
+    : [];
+}
+
+const SCORABLE_CLIENT_CHART_SECTIONS = [
+  "demographics",
+  "medicalHistory",
+  "riskAssessment",
+  "contacts",
+  "clientNotes",
+  "careProviderNotes",
+  "progressNotes",
+  "services",
+  "carePlans",
+  "clientForms",
+  "documentApprovals",
+  "medications",
+  "attachmentMetadata",
+  "visitAttachmentMetadata",
+  "openTasks"
+] as const;
+
+function clientListItemToSearchResult(
+  item: ClientListApiItem
+): ClientChartSearchResult | null {
+  const clientId = readPositiveInteger(item.id);
+  const guid = readPositiveInteger(item.guid);
+  if (!clientId || !guid) return null;
+  const fullName = [readNonEmptyString(item.first_name), readNonEmptyString(item.last_name)]
+    .filter(Boolean)
+    .join(" ") || `Client ${clientId}`;
+  return {
+    clientId,
+    routeId: clientId.toString(36),
+    guid,
+    fullName,
+    preferredName: readNonEmptyString(item.preferred_name),
+    status: readNonEmptyString(item.status),
+    alayaCareId: `AC${String(guid).padStart(9, "0")}`,
+    dateOfBirth: readNonEmptyString(item.birthday),
+    clientGroups: (item.groups ?? []).filter((group) => Boolean(group.trim()))
+  };
+}
+
+function metadataCandidateScore(item: ClientListApiItem): number {
+  const scalarValues = [
+    item.external_id,
+    item.emergency_response_level,
+    item.address,
+    item.phone_main,
+    item.phone_personal,
+    item.phone_other,
+    item.preferred_name,
+    item.birthday
+  ];
+  return (
+    scalarValues.filter((value) => typeof value === "string" && value.trim()).length +
+    Math.min(item.groups?.length ?? 0, 3) +
+    Math.min(item.tags_v2?.length ?? 0, 3)
+  );
+}
+
+function buildClientChartScoreRequests(
+  clientId: number,
+  guid: number,
+  branchId: number
+): Array<[string, string]> {
+  return [
+    ["demographics", `/api/v1/patients/${clientId}/demographics`],
+    ["medicalHistory", `/api/v1/clinical/documents?type=medical_history&account_id=${clientId}`],
+    ["riskAssessment", `/api/v1/clinical/documents?type=risk_assessment&account_id=${clientId}`],
+    [
+      "contacts",
+      withQuery("/api/v1/patients/contacts/", {
+        is_active: "true",
+        guid_to: String(guid),
+        count: "1",
+        page: "1"
+      })
+    ],
+    [
+      "clientNotes",
+      withQuery(`/api/v1/patients/clients/${clientId}/client-notes`, {
+        count: "1",
+        page: "1",
+        "status[]": "active"
+      })
+    ],
+    [
+      "careProviderNotes",
+      withQuery(`/api/v1/patients/clients/${clientId}/care-provider-notes`, {
+        count: "1",
+        page: "1",
+        is_archived: "false"
+      })
+    ],
+    [
+      "progressNotes",
+      withQuery(`/api/v3/clinical/clients/${clientId}/progress_notes`, {
+        count: "1",
+        page: "1",
+        archived: "false"
+      })
+    ],
+    [
+      "services",
+      withQuery("/api/v1/scheduler/services", {
+        count: "1",
+        page: "1",
+        client_id: String(clientId),
+        include_disabled: "true"
+      })
+    ],
+    [
+      "carePlans",
+      withQuery(`/api/v1/clinical/client/${clientId}/careplans`, {
+        count: "1",
+        page: "1",
+        include_set: "minimal"
+      })
+    ],
+    [
+      "clientForms",
+      withQuery("/api/v1/tasks/forms20/submissions", {
+        count: "1",
+        page: "1",
+        account_id: String(clientId),
+        include_draft_status: "true"
+      })
+    ],
+    [
+      "documentApprovals",
+      withQuery("/api/v1/clinical/document_approval", {
+        client_id: String(clientId),
+        count: "1",
+        page: "1"
+      })
+    ],
+    [
+      "medications",
+      withQuery(`/api/v3/clinical/clients/${clientId}/medications`, {
+        count: "1",
+        page: "1"
+      })
+    ],
+    ["attachmentMetadata", `/api/v3/files/${clientId}/`],
+    [
+      "visitAttachmentMetadata",
+      withQuery("/api/v1/scheduler/visit_attachments", { client_id: String(clientId) })
+    ],
+    [
+      "openTasks",
+      withRepeatedQuery("/api/v2/tasks/tasks", [
+        ["page", "1"],
+        ["count", "1"],
+        ["branch_id", String(branchId)],
+        ["contexts", `include,api.patients.client,${clientId}`]
+      ])
+    ]
+  ];
+}
+
+function scoreClientChartSections(sections: Record<string, ClientChartSection>): Pick<
+  ClientChartRankedResult,
+  "fullnessScore" | "populatedSections" | "totalSections" | "recordCount" | "failedSections"
+> {
+  let populatedSections = 0;
+  let recordCount = 0;
+  let failedSections = 0;
+  for (const name of SCORABLE_CLIENT_CHART_SECTIONS) {
+    const section = sections[name];
+    if (!section?.ok) {
+      failedSections += 1;
+      continue;
+    }
+    const count = estimateSectionRecordCount(section.data);
+    if (count > 0) populatedSections += 1;
+    recordCount += Math.min(count, 100);
+  }
+  return {
+    fullnessScore: populatedSections * 1000 + Math.min(recordCount, 999) - failedSections * 100,
+    populatedSections,
+    totalSections: SCORABLE_CLIENT_CHART_SECTIONS.length,
+    recordCount,
+    failedSections
+  };
+}
+
+function estimateSectionRecordCount(value: unknown): number {
+  if (value === null || value === undefined || value === "") return 0;
+  if (Array.isArray(value)) return value.length;
+  if (typeof value !== "object") return 1;
+
+  const record = value as Record<string, unknown>;
+  const collectionKeys = [
+    "items",
+    "results",
+    "documents",
+    "notes",
+    "services",
+    "medications",
+    "submissions",
+    "attachments"
+  ];
+  const collectionCounts = collectionKeys
+    .map((key) => record[key])
+    .filter(Array.isArray)
+    .map((items) => items.length);
+  const declaredCount = toOptionalNumber(record.count);
+  if (collectionCounts.length > 0 || declaredCount !== undefined) {
+    return Math.max(declaredCount ?? 0, ...collectionCounts, 0);
+  }
+  if (record.data !== undefined) {
+    const nestedCount = estimateSectionRecordCount(record.data);
+    if (nestedCount > 0) return nestedCount;
+  }
+
+  const ignoredKeys = new Set([
+    "page",
+    "items_per_page",
+    "total_pages",
+    "count",
+    "_links",
+    "links"
+  ]);
+  return Object.entries(record).some(
+    ([key, item]) => !ignoredKeys.has(key) && estimateSectionRecordCount(item) > 0
+  )
+    ? 1
+    : 0;
+}
+
 async function parseResponseBody(response: Response): Promise<unknown> {
   const text = await response.text();
 
@@ -321,4 +1527,239 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+function unwrapConnectorResponse(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const response = (value as { response?: unknown }).response;
+  return response !== undefined ? response : value;
+}
+
+function getConnectorErrorDetail(value: unknown): string {
+  if (typeof value === "string") {
+    return value.slice(0, 300);
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["message", "detail", "error", "code"]) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim().slice(0, 300);
+    }
+  }
+  return "";
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object" && !Array.isArray(item)
+      )
+    : [];
+}
+
+function toTemplateReference(record: Record<string, unknown>): ConnectorTemplateReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Template ${toNumber(record.id)}`,
+    description: toOptionalString(record.description),
+    url: toOptionalString(record.url),
+    usedApps: Array.isArray(record.usedApps)
+      ? record.usedApps.map(toReferenceName).filter((value): value is string => Boolean(value))
+      : [],
+    usage: toOptionalNumber(record.usage)
+  };
+}
+
+function toConnectionReference(record: Record<string, unknown>): ConnectorConnectionReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Connection ${toNumber(record.id)}`,
+    accountLabel: toOptionalString(record.accountLabel),
+    packageName: toReferenceName(record.packageName),
+    theme: toOptionalString(record.theme),
+    accountType: toOptionalString(record.accountType),
+    scoped: toOptionalBoolean(record.scoped),
+    editable: toOptionalBoolean(record.editable),
+    upgradeable: toOptionalBoolean(record.upgradeable)
+  };
+}
+
+function toWebhookReference(record: Record<string, unknown>): ConnectorWebhookReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Webhook ${toNumber(record.id)}`,
+    type: toOptionalString(record.type),
+    packageName: toReferenceName(record.packageName),
+    theme: toOptionalString(record.theme),
+    enabled: toOptionalBoolean(record.enabled),
+    editable: toOptionalBoolean(record.editable),
+    gone: toOptionalBoolean(record.gone),
+    queueCount: toOptionalNumber(record.queueCount),
+    queueLimit: toOptionalNumber(record.queueLimit),
+    typeName: toOptionalString(record.typeName),
+    typeAppName: toReferenceName(record.typeAppName),
+    scenarioId: toOptionalNumber(record.scenarioId),
+    scenarioName: toOptionalString(record.scenarioName),
+    scenarioIsActive: toOptionalBoolean(record.scenarioIsActive),
+    hasWebhookUrl: typeof record.url === "string" && Boolean(record.url)
+  };
+}
+
+function toFunctionReference(record: Record<string, unknown>): ConnectorFunctionReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Function ${toNumber(record.id)}`,
+    args: toOptionalString(record.args),
+    description: toOptionalString(record.description),
+    createdAt: toOptionalString(record.createdAt),
+    updatedAt: toOptionalString(record.updatedAt)
+  };
+}
+
+function toKeyReference(record: Record<string, unknown>): ConnectorKeyReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Key ${toNumber(record.id)}`,
+    packageName: toReferenceName(record.packageName),
+    theme: toOptionalString(record.theme),
+    typeName: toOptionalString(record.typeName)
+  };
+}
+
+function toDataStoreReference(record: Record<string, unknown>): ConnectorDataStoreReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Data store ${toNumber(record.id)}`,
+    records: toOptionalNumber(record.records),
+    size: toOptionalNumber(record.size),
+    maxSize: toOptionalNumber(record.maxSize),
+    dataStructureId: toOptionalNumber(record.datastructureId)
+  };
+}
+
+function toDataStructureReference(record: Record<string, unknown>): ConnectorDataStructureReference {
+  return {
+    id: toNumber(record.id),
+    name: toStringValue(record.name) || `Data structure ${toNumber(record.id)}`
+  };
+}
+
+function toScenarioRun(record: Record<string, unknown>): ConnectorScenarioRun {
+  const id = record.id ?? record.scenarioLogId ?? record.executionId;
+  return {
+    id: id === undefined || id === null ? undefined : String(id),
+    started: firstOptionalString(record, ["started", "startedAt", "timestamp", "created", "createdAt"]),
+    status: firstOptionalString(record, ["status", "state"]),
+    duration: firstOptionalNumber(record, ["duration", "durationMs"]),
+    operations: firstOptionalNumber(record, ["operations", "operationCount"]),
+    transfer: firstOptionalNumber(record, ["transfer", "dataTransfer"]),
+    kind: firstOptionalString(record, ["type", "kind", "logType"])
+  };
+}
+
+function firstOptionalString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = toOptionalString(record[key]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function firstOptionalNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = toOptionalNumber(record[key]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function toReferenceName(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value || undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  return toOptionalString(record.name) ?? toOptionalString(record.label);
+}
+
+function toNumber(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toStringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toOptionalString(value: unknown): string | undefined {
+  const result = toStringValue(value);
+  return result || undefined;
+}
+
+function toOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function safeFilePart(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "scenario";
+}
+
+function jsonBytes(value: unknown): Uint8Array {
+  return strToU8(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function downloadBrowserFile(content: Uint8Array, type: string, filename: string): void {
+  const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+  const url = URL.createObjectURL(new Blob([buffer], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  action: (item: T) => Promise<R>
+): Promise<R[]> {
+  let cursor = 0;
+  const results = new Array<R>(items.length);
+  const worker = async (): Promise<void> => {
+    while (cursor < items.length) {
+      const index = cursor;
+      const item = items[index];
+      cursor += 1;
+      results[index] = await action(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }
