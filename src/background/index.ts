@@ -6,6 +6,8 @@ import type {
   ClientChartRankResponse,
   ClientChartSearchResponse
 } from "../shared/clientChart";
+import type { ClientChartImportResult } from "../shared/clientChartImport";
+import { AC_FEATURE_FLAGS, disabledFeatureMessage } from "../shared/featureFlags";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -70,6 +72,7 @@ type PopupResponseData =
   | ClientChartExportSnapshot
   | ClientChartSearchResponse
   | ClientChartRankResponse
+  | ClientChartImportResult
   | ConnectorScenarioSnapshot
   | ConnectorScenarioBundle
   | ConnectorScenarioBulkDownloadResult
@@ -154,18 +157,35 @@ async function handlePopupMessage(
         type: "ac/content/export-form-context-catalog"
       });
     case "ac/popup/search-client-charts":
+      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
+        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
+      }
       return sendMessageToTab<ClientChartSearchResponse>(tabId, {
         type: "ac/content/search-client-charts",
         payload: message.payload
       });
     case "ac/popup/rank-client-charts":
+      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
+        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
+      }
       return sendMessageToTab<ClientChartRankResponse>(tabId, {
         type: "ac/content/rank-client-charts",
         payload: message.payload
       });
     case "ac/popup/export-active-client-chart":
+      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
+        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
+      }
       return sendMessageToTab<ClientChartExportSnapshot>(tabId, {
         type: "ac/content/export-active-client-chart",
+        payload: message.payload
+      });
+    case "ac/popup/import-client-chart":
+      if (!AC_FEATURE_FLAGS.clientChartImport) {
+        return { ok: false, error: disabledFeatureMessage("Create client from JSON") };
+      }
+      return sendMessageToTab<ClientChartImportResult>(tabId, {
+        type: "ac/content/import-client-chart",
         payload: message.payload
       });
     case "ac/popup/get-connector-scenario":

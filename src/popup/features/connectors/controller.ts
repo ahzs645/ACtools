@@ -19,15 +19,14 @@ import {
   validateConnectorBlueprint
 } from "../../../shared/connectorScenarios";
 import { formatError } from "../../../shared/errors";
+import { setDetailSubtitle } from "../../ui/detailHeader";
 import { showToast } from "../../ui/toasts";
 
 interface ConnectorElements {
   views: Record<ConnectorView, HTMLElement>;
   navigationButtons: HTMLButtonElement[];
-  headerBack: HTMLButtonElement;
   context: HTMLElement;
   summary: HTMLElement;
-  source: HTMLElement;
   editor: HTMLTextAreaElement;
   validation: HTMLElement;
   scenarioCount: HTMLElement;
@@ -66,6 +65,8 @@ interface ConnectorElements {
 
 type ConnectorReferenceKey = "templates" | "connections" | "webhooks" | "functions" | "keys" | "dataStores" | "dataStructures";
 type ConnectorView = "menu" | "scenarios" | "editor" | "references" | "health" | "diagnostics";
+
+const CONNECTOR_SUBTITLE = "Choose the workspace you need.";
 
 export class ConnectorUtilitiesController {
   private elements: ConnectorElements | null = null;
@@ -146,21 +147,23 @@ export class ConnectorUtilitiesController {
   private showView(view: ConnectorView): void {
     this.currentView = view;
     const elements = this.requireElements();
-    elements.headerBack.hidden = view === "menu";
-    if (view !== "editor") {
-      elements.source.textContent = {
-        menu: "Connector Utilities",
-        scenarios: "Scenario Library",
-        references: "Asset Inventory",
-        health: "Operations & Health",
-        diagnostics: "Diagnostics & Audit"
-      }[view];
-    } else {
-      elements.source.textContent = this.snapshot ? getSourceLabel(this.snapshot) : "JSON Editor";
-    }
-    (Object.keys(this.requireElements().views) as ConnectorView[]).forEach((key) => {
+    setDetailSubtitle(this.describeView(view));
+    (Object.keys(elements.views) as ConnectorView[]).forEach((key) => {
       elements.views[key].hidden = key !== view;
     });
+  }
+
+  private describeView(view: ConnectorView): string {
+    if (view === "editor") {
+      return this.snapshot ? `JSON Editor · ${getSourceLabel(this.snapshot)}` : "JSON Editor";
+    }
+    return {
+      menu: CONNECTOR_SUBTITLE,
+      scenarios: "Scenario Library",
+      references: "Asset Inventory",
+      health: "Operations & Health",
+      diagnostics: "Diagnostics & Audit"
+    }[view];
   }
 
   private async load(source: ConnectorScenarioSource, scenarioId: number): Promise<void> {
@@ -473,7 +476,7 @@ export class ConnectorUtilitiesController {
     this.snapshot = snapshot;
     this.originalText = `${JSON.stringify(snapshot.blueprint, null, 2)}\n`;
     elements.editor.value = this.originalText;
-    elements.source.textContent = getSourceLabel(snapshot);
+    setDetailSubtitle(this.describeView("editor"));
     elements.context.textContent = `${snapshot.scenario.name} · Scenario ${snapshot.scenarioId} · Team ${snapshot.teamId}`;
     elements.summary.textContent = buildSummary(snapshot);
     elements.saveConfirmation.checked = false;
@@ -786,10 +789,8 @@ function getConnectorElements(): ConnectorElements {
       diagnostics: get<HTMLElement>('[data-connector-view="diagnostics"]')
     },
     navigationButtons,
-    headerBack: get<HTMLButtonElement>("#connector-header-back"),
     context: get<HTMLElement>("#connector-context"),
     summary: get<HTMLElement>("#connector-summary"),
-    source: get<HTMLElement>("#connector-source"),
     editor: get<HTMLTextAreaElement>("#connector-json-editor"),
     validation: get<HTMLElement>("#connector-validation"),
     scenarioCount: get<HTMLElement>("#connector-scenario-count"),
@@ -900,7 +901,7 @@ function formatBytes(value: number | undefined): string {
 
 function makeMessage(text: string): HTMLParagraphElement {
   const paragraph = document.createElement("p");
-  paragraph.className = "connector-card__summary";
+  paragraph.className = "utility-card__summary";
   paragraph.textContent = text;
   return paragraph;
 }

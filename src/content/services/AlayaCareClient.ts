@@ -19,6 +19,15 @@ import {
   type ClientChartSearchResult,
   type ClientChartSection
 } from "../../shared/clientChart";
+import {
+  ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
+  isSyntheticClientName,
+  sanitizeMedicalHistoryForImport,
+  sanitizeRiskAssessmentForImport,
+  type ClientChartImportRequest,
+  type ClientChartImportResult,
+  type ClientChartImportStepResult
+} from "../../shared/clientChartImport";
 import type {
   ConnectorBlueprint,
   ConnectorConnectionReference,
@@ -134,6 +143,10 @@ interface ClientListApiItem {
 interface ClientListApiResponse {
   count?: number;
   items?: ClientListApiItem[];
+}
+
+interface ClientCreateApiResponse extends Record<string, unknown> {
+  id?: number | string;
 }
 
 interface ScheduleRecord {
@@ -740,6 +753,124 @@ export class AlayaCareClient {
     };
   }
 
+  async importClientChart(request: ClientChartImportRequest): Promise<ClientChartImportResult> {
+    this.assertSyntheticUatClientChartAccess(request.confirmedSynthetic);
+    if (!request.confirmedCreate) {
+      throw new Error("Confirm that this operation will create a new synthetic UAT client.");
+    }
+
+    const sourceOrigin = new URL(request.sourceTenantOrigin).origin;
+    if (sourceOrigin !== window.location.origin) {
+      throw new Error(
+        "The client-chart JSON must be imported into the same UAT tenant it was exported from."
+      );
+    }
+
+    const firstName = request.targetFirstName.trim();
+    const lastName = request.targetLastName.trim();
+    if (!firstName || !lastName || firstName.length > 100 || lastName.length > 100) {
+      throw new Error("Enter target first and last names of 1–100 characters each.");
+    }
+    if (!isSyntheticClientName(firstName, lastName)) {
+      throw new Error("The target name must include Test, Synthetic, UAT, Clone, or Copy.");
+    }
+    if (request.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(request.birthday)) {
+      throw new Error("The source birthday must use YYYY-MM-DD format.");
+    }
+
+    const createSource = "/api/v1/patients/";
+    const createResponse = await fetch(createSource, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        first_name: firstName,
+        last_name: lastName,
+        ...(request.birthday ? { birthday: request.birthday } : {})
+      })
+    });
+    const createBody = await parseResponseBody(createResponse);
+    if (!createResponse.ok) {
+      throw new Error(
+        `Client creation failed (${createResponse.status}): ${formatResponseError(createBody)}`
+      );
+    }
+    const targetClientId = readPositiveInteger((createBody as ClientCreateApiResponse | null)?.id);
+    if (!targetClientId) {
+      throw new Error("AlayaCare created the client but did not return its client ID.");
+    }
+
+    const steps: ClientChartImportStepResult[] = [
+      {
+        section: "client",
+        source: createSource,
+        ok: true,
+        status: createResponse.status
+      }
+    ];
+    const sectionRequests: Array<Promise<ClientChartImportStepResult>> = [];
+    const medicalHistoryData = sanitizeMedicalHistoryForImport(request.medicalHistoryData);
+    const riskAssessmentData = sanitizeRiskAssessmentForImport(request.riskAssessmentData);
+    if (medicalHistoryData) {
+      sectionRequests.push(
+        this.importClinicalDocument(targetClientId, "medical_history", medicalHistoryData)
+      );
+    }
+    if (riskAssessmentData) {
+      sectionRequests.push(
+        this.importClinicalDocument(targetClientId, "risk_assessment", riskAssessmentData)
+      );
+    }
+    steps.push(...(await Promise.all(sectionRequests)));
+
+    const routeId = targetClientId.toString(36);
+    const copiedSections = steps.flatMap((step) => {
+      if (step.ok && step.section === "medicalHistory") return ["medicalHistory" as const];
+      if (step.ok && step.section === "riskAssessment") return ["riskAssessment" as const];
+      return [];
+    });
+    const successful = steps.filter((step) => step.ok).length;
+    return {
+      schemaVersion: ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
+      importedAt: new Date().toISOString(),
+      tenantOrigin: window.location.origin,
+      sourceClient: {
+        id: request.sourceClientId,
+        fullName: request.sourceClientName
+      },
+      targetClient: {
+        id: targetClientId,
+        routeId,
+        fullName: `${firstName} ${lastName}`,
+        url: `${window.location.origin}/#/clients/${routeId}/overview`
+      },
+      steps,
+      counts: {
+        requested: steps.length,
+        successful,
+        failed: steps.length - successful
+      },
+      scope: {
+        syntheticUatOnly: true,
+        copiedSections,
+        omittedSections: [
+          "contacts",
+          "notes",
+          "services",
+          "care plans",
+          "forms",
+          "tasks",
+          "medications",
+          "documents",
+          "attachments"
+        ]
+      }
+    };
+  }
+
   async listConnectorScenarios(): Promise<ConnectorScenarioListResult> {
     const context = await this.getConnectorTeamContext();
     const response = await this.fetchConnectorJson<ConnectorScenarioListApiResponse>(
@@ -1094,6 +1225,60 @@ export class AlayaCareClient {
       };
     } finally {
       if (timeout !== undefined) window.clearTimeout(timeout);
+    }
+  }
+
+  private async importClinicalDocument(
+    clientId: number,
+    type: "medical_history" | "risk_assessment",
+    data: Record<string, unknown>
+  ): Promise<ClientChartImportStepResult> {
+    const section = type === "medical_history" ? "medicalHistory" : "riskAssessment";
+    const lookupSource = withQuery("/api/v1/clinical/documents", {
+      type,
+      account_id: String(clientId)
+    });
+    try {
+      let targetDocument: Record<string, unknown> | undefined;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const collection = await this.fetchJson<unknown>(lookupSource);
+        targetDocument = readItems(collection)[0];
+        if (targetDocument) break;
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
+      }
+      const documentId = readNonEmptyString(targetDocument?.id);
+      const schemaId = readNonEmptyString(targetDocument?.schema_id);
+      if (!documentId || !schemaId) {
+        throw new Error(`AlayaCare did not initialize the target ${type} document.`);
+      }
+
+      const source = `/api/v1/clinical/documents/${encodeURIComponent(documentId)}`;
+      const response = await fetch(source, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          account_id: clientId,
+          schema_id: schemaId,
+          type,
+          data
+        })
+      });
+      const body = await parseResponseBody(response);
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+      }
+      return { section, source, ok: true, status: response.status };
+    } catch (error) {
+      return {
+        section,
+        source: lookupSource,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
@@ -1527,6 +1712,14 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+function formatResponseError(value: unknown): string {
+  if (typeof value === "string") return value.slice(0, 500);
+  if (!value || typeof value !== "object") return "Unknown response";
+  const record = value as Record<string, unknown>;
+  const message = readNonEmptyString(record.message) ?? readNonEmptyString(record.error);
+  return message ?? JSON.stringify(value).slice(0, 500);
 }
 
 function unwrapConnectorResponse(value: unknown): unknown {

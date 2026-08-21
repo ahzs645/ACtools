@@ -80,6 +80,11 @@ async function handleContentMessage(
           message.payload.clientId
         )
       };
+    case "ac/content/import-client-chart":
+      return {
+        ok: true,
+        data: await client.importClientChart(message.payload)
+      };
     case "ac/content/get-connector-scenario":
       return {
         ok: true,

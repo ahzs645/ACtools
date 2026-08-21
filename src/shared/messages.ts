@@ -4,6 +4,7 @@ import type {
   ClientChartRankResponse,
   ClientChartSearchResponse
 } from "./clientChart";
+import type { ClientChartImportRequest, ClientChartImportResult } from "./clientChartImport";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -91,6 +92,10 @@ export type RuntimeMessage =
   | {
       type: "ac/popup/export-active-client-chart";
       payload: { confirmedSynthetic: boolean; clientId?: number };
+    }
+  | {
+      type: "ac/popup/import-client-chart";
+      payload: ClientChartImportRequest;
     }
   | {
       type: "ac/popup/get-connector-scenario";
@@ -209,6 +214,10 @@ export type RuntimeMessage =
       payload: { confirmedSynthetic: boolean; clientId?: number };
     }
   | {
+      type: "ac/content/import-client-chart";
+      payload: ClientChartImportRequest;
+    }
+  | {
       type: "ac/content/get-connector-scenario";
       payload: { source: ConnectorScenarioSource; scenarioId?: number };
     }
@@ -249,6 +258,7 @@ export type ContentCommandData =
   | ClientChartExportSnapshot
   | ClientChartSearchResponse
   | ClientChartRankResponse
+  | ClientChartImportResult
   | ConnectorScenarioSnapshot
   | ConnectorScenarioBundle
   | ConnectorScenarioBulkDownloadResult

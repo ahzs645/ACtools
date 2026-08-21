@@ -11,6 +11,12 @@ import type {
   ClientChartSearchResult
 } from "../shared/clientChart";
 import type { ClientChartPdfParseSnapshot } from "../shared/clientChartPdf";
+import {
+  buildClientChartImportPreview,
+  isSyntheticClientName,
+  type ClientChartImportPreview,
+  type ClientChartImportResult
+} from "../shared/clientChartImport";
 import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
 import { buildAlayaCareCatalogXlsx } from "../shared/formContextXlsx";
 import type {
@@ -22,6 +28,7 @@ import type {
   EmployeeWriteResult
 } from "../shared/employees";
 import type { AppPreferences } from "../shared/environments";
+import { AC_FEATURE_FLAGS, disabledFeatureMessage, type AcFeatureFlags } from "../shared/featureFlags";
 import { EnvironmentManagerController } from "./features/environments/controller";
 import { ConnectorUtilitiesController } from "./features/connectors/controller";
 import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
@@ -32,6 +39,14 @@ import {
   sortEmployees
 } from "./features/employees/sort";
 import { loadAppPreferences, resetAppPreferences, saveAppPreferences } from "./features/preferences";
+import { setDetailHeader, setDetailSubtitle } from "./ui/detailHeader";
+import {
+  hideResultScope,
+  setResult,
+  setResultWorking,
+  showResultScope,
+  withResult
+} from "./ui/result";
 import { showToast } from "./ui/toasts";
 import {
   DEFAULT_SURFACE,
@@ -75,6 +90,10 @@ let clientChartSnapshot: ClientChartExportSnapshot | null = null;
 let clientChartPdfSnapshot: ClientChartPdfParseSnapshot | null = null;
 let clientChartSearchResults: ClientChartSearchResult[] = [];
 let clientChartRankings = new Map<number, ClientChartRankedResult>();
+let clientChartImportPreview: ClientChartImportPreview | null = null;
+let clientChartImportResult: ClientChartImportResult | null = null;
+let activePanelName: string | null = null;
+let clientChartView: ClientChartView = "menu";
 
 const elements = getPopupElements();
 const environmentManager = new EnvironmentManagerController(async () => {
@@ -104,6 +123,7 @@ async function init(): Promise<void> {
   await environmentManager.init();
   employeeCopyController.init();
   elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
+  applyClientChartGuard();
 
   elements.themeToggle.addEventListener("click", () => {
     void toggleTheme();
@@ -130,33 +150,16 @@ async function init(): Promise<void> {
   });
 
   elements.clientChartSyntheticConfirm.addEventListener("change", () => {
-    const confirmed = elements.clientChartSyntheticConfirm.checked;
-    elements.inspectClientChartButton.disabled = !confirmed;
-    elements.clientChartSearchInput.disabled = !confirmed;
-    elements.searchClientChartsButton.disabled =
-      !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
-    elements.clientChartRankLimit.disabled = !confirmed;
-    elements.rankClientChartsButton.disabled = !confirmed;
-    elements.clientChartPdfFiles.disabled = !confirmed;
-    elements.parseClientChartPdfsButton.disabled =
-      !confirmed || (elements.clientChartPdfFiles.files?.length ?? 0) === 0;
-    if (!confirmed) {
-      clientChartSnapshot = null;
-      clientChartPdfSnapshot = null;
-      clientChartSearchResults = [];
-      clientChartRankings.clear();
-      elements.clientChartSearchInput.value = "";
-      elements.clientChartPdfFiles.value = "";
-      elements.downloadClientChartButton.disabled = true;
-      elements.downloadClientChartPdfJsonButton.disabled = true;
-      elements.clientChartSummary.textContent =
-        "Confirm synthetic UAT data, then search for a client or inspect the active chart.";
-      renderClientChartSearchResults(
-        "Confirm synthetic UAT data above to enable patient search."
-      );
-      elements.clientChartPdfSummary.textContent =
-        "Confirm synthetic UAT data above, then select the batch PDFs.";
-    }
+    applyClientChartGuard();
+  });
+
+  elements.clientChartNavButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const view = button.dataset.chartNav as ClientChartView | undefined;
+      if (view) {
+        showClientChartView(view);
+      }
+    });
   });
 
   elements.inspectClientChartButton.addEventListener("click", () => {
@@ -186,6 +189,41 @@ async function init(): Promise<void> {
 
   elements.downloadClientChartButton.addEventListener("click", () => {
     if (clientChartSnapshot) downloadClientChartJson(clientChartSnapshot);
+  });
+
+  elements.clientChartImportFile.addEventListener("change", () => {
+    clientChartImportPreview = null;
+    clientChartImportResult = null;
+    resetClientChartImportPreviewUi();
+    const fileCount = elements.clientChartImportFile.files?.length ?? 0;
+    elements.previewClientChartImportButton.disabled =
+      !elements.clientChartSyntheticConfirm.checked || fileCount === 0;
+    elements.clientChartImportSummary.textContent = fileCount > 0
+      ? "JSON selected. Preview it locally before creating a synthetic client."
+      : "Select an AC Tools client-chart JSON export.";
+  });
+
+  elements.previewClientChartImportButton.addEventListener("click", () => {
+    void previewClientChartImport();
+  });
+
+  elements.createClientChartImportButton.addEventListener("click", () => {
+    void createClientChartImport();
+  });
+
+  for (const element of [
+    elements.clientChartImportFirstName,
+    elements.clientChartImportLastName,
+    elements.clientChartImportMedicalHistory,
+    elements.clientChartImportRiskAssessment,
+    elements.clientChartImportConfirm
+  ]) {
+    element.addEventListener("input", updateClientChartImportCreateAvailability);
+    element.addEventListener("change", updateClientChartImportCreateAvailability);
+  }
+
+  elements.downloadClientChartImportReportButton.addEventListener("click", () => {
+    if (clientChartImportResult) downloadClientChartImportReport(clientChartImportResult);
   });
 
   elements.clientChartPdfFiles.addEventListener("change", () => {
@@ -250,8 +288,11 @@ async function init(): Promise<void> {
   elements.preferencesReset.addEventListener("click", () => void resetPreferencesUi());
 
   elements.detailBackButton.addEventListener("click", () => {
-    const connectorPanel = elements.toolPanels.get("connector-utilities");
-    if (connectorPanel?.classList.contains("is-active") && connectorUtilities.backToOptions()) {
+    if (activePanelName === "connector-utilities" && connectorUtilities.backToOptions()) {
+      return;
+    }
+    if (activePanelName === "client-chart-export" && clientChartView !== "menu") {
+      showClientChartView("menu");
       return;
     }
     showLauncher();
@@ -317,7 +358,7 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
 
   if (action === "open-day-view") {
     showDetail(title, subtitle, "day-view");
-    elements.resultText.textContent = "Working\u2026";
+    setResultWorking();
 
     await withResult(async () => {
       const response = await sendRuntimeMessage<void>({ type: "ac/popup/open-day-view" });
@@ -341,7 +382,7 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
 
   if (panelName === "availability") {
     showDetail(title, subtitle, "availability");
-    elements.resultText.textContent = "Ready.";
+    setResult("Ready.");
     return;
   }
 
@@ -367,12 +408,19 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
     return;
   }
 
+  if (panelName === "client-chart-export") {
+    showDetail(title, subtitle, panelName);
+    showClientChartView("menu");
+    return;
+  }
+
   if (panelName) {
     showDetail(title, subtitle, panelName);
   }
 }
 
 function showLauncher(): void {
+  activePanelName = null;
   elements.launcherView.hidden = false;
   elements.launcherView.classList.add("is-active");
   elements.detailView.hidden = true;
@@ -380,17 +428,20 @@ function showLauncher(): void {
   elements.searchInput.focus();
 }
 
+/** Panels that render their own result block instead of the shared one. */
+const PANELS_WITHOUT_SHARED_RESULT = new Set([
+  "settings",
+  "connector-utilities",
+  "client-chart-export"
+]);
+
 function showDetail(title: string, subtitle: string, panelName: string): void {
-  const isConnector = panelName === "connector-utilities";
-  elements.detailTitle.textContent = title;
-  elements.detailSubtitle.textContent = subtitle;
+  activePanelName = panelName;
+  setDetailHeader(title, subtitle);
   elements.launcherView.hidden = true;
   elements.launcherView.classList.remove("is-active");
   elements.detailView.hidden = false;
   elements.detailView.classList.add("is-active");
-  elements.detailBackButton.hidden = isConnector;
-  elements.detailHeaderText.hidden = isConnector;
-  elements.connectorDetailActions.hidden = !isConnector;
 
   elements.toolPanels.forEach((panel, key) => {
     const isActive = key === panelName;
@@ -398,7 +449,11 @@ function showDetail(title: string, subtitle: string, panelName: string): void {
     panel.classList.toggle("is-active", isActive);
   });
 
-  elements.resultContainer.hidden = panelName === "settings" || panelName === "connector-utilities";
+  if (PANELS_WITHOUT_SHARED_RESULT.has(panelName)) {
+    hideResultScope();
+  } else {
+    showResultScope(panelName, title);
+  }
 }
 
 function showSettings(): void {
@@ -853,14 +908,14 @@ async function refreshConfiguredEmployeeTenants(): Promise<void> {
 
 async function updateSelectedEmployeeStatus(): Promise<void> {
   if (!selectedEmployee) {
-    elements.resultText.textContent = "Select an employee before updating status.";
+    setResult("Select an employee before updating status.");
     return;
   }
 
   const employeeId = selectedEmployee.id;
   const comment = elements.employeeStatusComment.value.trim();
   if (!comment) {
-    elements.resultText.textContent = "Enter a ticket or reason so the change has an audit note.";
+    setResult("Enter a ticket or reason so the change has an audit note.");
     return;
   }
 
@@ -884,18 +939,18 @@ async function updateSelectedEmployeeStatus(): Promise<void> {
 
 async function runSelectedEmployeeRoundTripTest(): Promise<void> {
   if (!selectedEmployee) {
-    elements.resultText.textContent = "Select the existing UAT test employee first.";
+    setResult("Select the existing UAT test employee first.");
     return;
   }
 
   const employee = selectedEmployee;
   const displayName = employeeDisplayName(employee);
   if (!isUatTenant || !/(test|do\s*not\s*send)/i.test(displayName)) {
-    elements.resultText.textContent = "The selected employee must be clearly marked Test on a UAT tenant.";
+    setResult("The selected employee must be clearly marked Test on a UAT tenant.");
     return;
   }
   if (employee.status !== "active") {
-    elements.resultText.textContent = "The round-trip test expects the selected test employee to start active.";
+    setResult("The round-trip test expects the selected test employee to start active.");
     return;
   }
 
@@ -977,12 +1032,13 @@ async function saveEmployeeApiCredentials(): Promise<void> {
     applyEmployeeApiCredentialStatus(response.data);
     await environmentManager.refresh();
     await refreshConfiguredEmployeeTenants();
-    elements.resultText.textContent = response.data.storage === "local"
+    const message = response.data.storage === "local"
       ? "API credentials were validated and remembered in this Chrome profile."
       : "API credentials were validated and are available for this Chrome session only.";
-    showToast("success", "Credentials validated", elements.resultText.textContent);
+    setResult(message);
+    showToast("success", "Credentials validated", message);
   } catch (error) {
-    elements.resultText.textContent = formatError(error);
+    setResult(formatError(error));
     showToast("error", "Credentials rejected", formatError(error));
   } finally {
     elements.employeeApiSaveButton.disabled = false;
@@ -994,14 +1050,14 @@ async function clearEmployeeApiCredentials(): Promise<void> {
     type: "ac/popup/clear-employee-api-credentials"
   });
   if (!response.ok || !response.data) {
-    elements.resultText.textContent = response.error ?? "Unable to clear API credentials.";
+    setResult(response.error ?? "Unable to clear API credentials.");
     return;
   }
   await clearEmployeeCaches(response.data.origin);
   applyEmployeeApiCredentialStatus(response.data);
   elements.employeeApiRemember.checked = false;
   await refreshConfiguredEmployeeTenants();
-  elements.resultText.textContent = "API credentials cleared from session and device storage.";
+  setResult("API credentials cleared from session and device storage.");
   showToast("info", "Credentials cleared", `Removed credentials for ${response.data.origin}.`);
 }
 
@@ -1043,8 +1099,6 @@ function formatReferences(references: EmployeeDetail["groups"]): string {
 interface PopupElements {
   form: HTMLFormElement;
   statusText: HTMLElement;
-  resultText: HTMLElement;
-  resultContainer: HTMLElement;
   refreshStatusButton: HTMLButtonElement;
   themeToggle: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
@@ -1053,11 +1107,7 @@ interface PopupElements {
   emptySearch: HTMLElement;
   launcherView: HTMLElement;
   detailView: HTMLElement;
-  detailTitle: HTMLElement;
-  detailSubtitle: HTMLElement;
   detailBackButton: HTMLButtonElement;
-  detailHeaderText: HTMLElement;
-  connectorDetailActions: HTMLElement;
   plannedTitle: HTMLElement;
   plannedDescription: HTMLElement;
   toolTiles: HTMLButtonElement[];
@@ -1069,6 +1119,8 @@ interface PopupElements {
   catalogCsvExportButton: HTMLButtonElement;
   catalogXlsxExportButton: HTMLButtonElement;
   clientChartSyntheticConfirm: HTMLInputElement;
+  clientChartViews: Map<ClientChartView, HTMLElement>;
+  clientChartNavButtons: HTMLButtonElement[];
   clientChartSearchInput: HTMLInputElement;
   searchClientChartsButton: HTMLButtonElement;
   clientChartRankLimit: HTMLSelectElement;
@@ -1077,6 +1129,20 @@ interface PopupElements {
   inspectClientChartButton: HTMLButtonElement;
   downloadClientChartButton: HTMLButtonElement;
   clientChartSummary: HTMLElement;
+  clientChartImportFile: HTMLInputElement;
+  previewClientChartImportButton: HTMLButtonElement;
+  createClientChartImportButton: HTMLButtonElement;
+  clientChartImportTarget: HTMLElement;
+  clientChartImportFirstName: HTMLInputElement;
+  clientChartImportLastName: HTMLInputElement;
+  clientChartImportSections: HTMLFieldSetElement;
+  clientChartImportMedicalHistory: HTMLInputElement;
+  clientChartImportRiskAssessment: HTMLInputElement;
+  clientChartImportConfirmContainer: HTMLElement;
+  clientChartImportConfirm: HTMLInputElement;
+  openImportedClientLink: HTMLAnchorElement;
+  downloadClientChartImportReportButton: HTMLButtonElement;
+  clientChartImportSummary: HTMLElement;
   clientChartPdfFiles: HTMLInputElement;
   parseClientChartPdfsButton: HTMLButtonElement;
   downloadClientChartPdfJsonButton: HTMLButtonElement;
@@ -1115,8 +1181,6 @@ interface PopupElements {
 function getPopupElements(): PopupElements {
   const form = document.querySelector<HTMLFormElement>("#availability-form");
   const statusText = document.querySelector<HTMLElement>("#status-text");
-  const resultText = document.querySelector<HTMLElement>("#result-text");
-  const resultContainer = document.querySelector<HTMLElement>("#result-container");
   const refreshStatusButton = document.querySelector<HTMLButtonElement>("#refresh-status");
   const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
   const settingsButton = document.querySelector<HTMLButtonElement>("#settings-button");
@@ -1125,11 +1189,7 @@ function getPopupElements(): PopupElements {
   const emptySearch = document.querySelector<HTMLElement>("#empty-search");
   const launcherView = document.querySelector<HTMLElement>("#view-launcher");
   const detailView = document.querySelector<HTMLElement>("#view-detail");
-  const detailTitle = document.querySelector<HTMLElement>("#detail-title");
-  const detailSubtitle = document.querySelector<HTMLElement>("#detail-subtitle");
   const detailBackButton = document.querySelector<HTMLButtonElement>("#detail-back");
-  const detailHeaderText = document.querySelector<HTMLElement>("#detail-header-text");
-  const connectorDetailActions = document.querySelector<HTMLElement>("#connector-detail-actions");
   const plannedTitle = document.querySelector<HTMLElement>("#planned-title");
   const plannedDescription = document.querySelector<HTMLElement>("#planned-description");
   const surfaceHint = document.querySelector<HTMLElement>("#surface-hint");
@@ -1144,6 +1204,15 @@ function getPopupElements(): PopupElements {
   );
   const clientChartSyntheticConfirm = document.querySelector<HTMLInputElement>(
     "#client-chart-synthetic-confirm"
+  );
+  const clientChartViewElements = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-chart-view]")
+  );
+  const clientChartViews = new Map<ClientChartView, HTMLElement>(
+    clientChartViewElements.map((view) => [view.dataset.chartView as ClientChartView, view])
+  );
+  const clientChartNavButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("[data-chart-nav]")
   );
   const clientChartSearchInput = document.querySelector<HTMLInputElement>(
     "#client-chart-search-input"
@@ -1167,6 +1236,46 @@ function getPopupElements(): PopupElements {
     "#download-client-chart"
   );
   const clientChartSummary = document.querySelector<HTMLElement>("#client-chart-summary");
+  const clientChartImportFile = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-file"
+  );
+  const previewClientChartImportButton = document.querySelector<HTMLButtonElement>(
+    "#preview-client-chart-import"
+  );
+  const createClientChartImportButton = document.querySelector<HTMLButtonElement>(
+    "#create-client-chart-import"
+  );
+  const clientChartImportTarget = document.querySelector<HTMLElement>(".chart-import__target");
+  const clientChartImportFirstName = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-first-name"
+  );
+  const clientChartImportLastName = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-last-name"
+  );
+  const clientChartImportSections = document.querySelector<HTMLFieldSetElement>(
+    ".chart-import__sections"
+  );
+  const clientChartImportMedicalHistory = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-medical-history"
+  );
+  const clientChartImportRiskAssessment = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-risk-assessment"
+  );
+  const clientChartImportConfirmContainer = document.querySelector<HTMLElement>(
+    ".chart-import__confirm"
+  );
+  const clientChartImportConfirm = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-confirm"
+  );
+  const openImportedClientLink = document.querySelector<HTMLAnchorElement>(
+    "#open-imported-client"
+  );
+  const downloadClientChartImportReportButton = document.querySelector<HTMLButtonElement>(
+    "#download-client-chart-import-report"
+  );
+  const clientChartImportSummary = document.querySelector<HTMLElement>(
+    "#client-chart-import-summary"
+  );
   const clientChartPdfFiles = document.querySelector<HTMLInputElement>("#client-chart-pdf-files");
   const parseClientChartPdfsButton = document.querySelector<HTMLButtonElement>(
     "#parse-client-chart-pdfs"
@@ -1231,8 +1340,6 @@ function getPopupElements(): PopupElements {
   if (
     !form ||
     !statusText ||
-    !resultText ||
-    !resultContainer ||
     !refreshStatusButton ||
     !themeToggle ||
     !settingsButton ||
@@ -1241,11 +1348,7 @@ function getPopupElements(): PopupElements {
     !emptySearch ||
     !launcherView ||
     !detailView ||
-    !detailTitle ||
-    !detailSubtitle ||
     !detailBackButton ||
-    !detailHeaderText ||
-    !connectorDetailActions ||
     !plannedTitle ||
     !plannedDescription ||
     !surfaceHint ||
@@ -1253,6 +1356,8 @@ function getPopupElements(): PopupElements {
     !catalogCsvExportButton ||
     !catalogXlsxExportButton ||
     !clientChartSyntheticConfirm ||
+    clientChartViews.size === 0 ||
+    clientChartNavButtons.length === 0 ||
     !clientChartSearchInput ||
     !searchClientChartsButton ||
     !clientChartRankLimit ||
@@ -1261,6 +1366,20 @@ function getPopupElements(): PopupElements {
     !inspectClientChartButton ||
     !downloadClientChartButton ||
     !clientChartSummary ||
+    !clientChartImportFile ||
+    !previewClientChartImportButton ||
+    !createClientChartImportButton ||
+    !clientChartImportTarget ||
+    !clientChartImportFirstName ||
+    !clientChartImportLastName ||
+    !clientChartImportSections ||
+    !clientChartImportMedicalHistory ||
+    !clientChartImportRiskAssessment ||
+    !clientChartImportConfirmContainer ||
+    !clientChartImportConfirm ||
+    !openImportedClientLink ||
+    !downloadClientChartImportReportButton ||
+    !clientChartImportSummary ||
     !clientChartPdfFiles ||
     !parseClientChartPdfsButton ||
     !downloadClientChartPdfJsonButton ||
@@ -1305,8 +1424,6 @@ function getPopupElements(): PopupElements {
   return {
     form,
     statusText,
-    resultText,
-    resultContainer,
     refreshStatusButton,
     themeToggle,
     settingsButton,
@@ -1315,11 +1432,7 @@ function getPopupElements(): PopupElements {
     emptySearch,
     launcherView,
     detailView,
-    detailTitle,
-    detailSubtitle,
     detailBackButton,
-    detailHeaderText,
-    connectorDetailActions,
     plannedTitle,
     plannedDescription,
     toolTiles,
@@ -1331,6 +1444,8 @@ function getPopupElements(): PopupElements {
     catalogCsvExportButton,
     catalogXlsxExportButton,
     clientChartSyntheticConfirm,
+    clientChartViews,
+    clientChartNavButtons,
     clientChartSearchInput,
     searchClientChartsButton,
     clientChartRankLimit,
@@ -1339,6 +1454,20 @@ function getPopupElements(): PopupElements {
     inspectClientChartButton,
     downloadClientChartButton,
     clientChartSummary,
+    clientChartImportFile,
+    previewClientChartImportButton,
+    createClientChartImportButton,
+    clientChartImportTarget,
+    clientChartImportFirstName,
+    clientChartImportLastName,
+    clientChartImportSections,
+    clientChartImportMedicalHistory,
+    clientChartImportRiskAssessment,
+    clientChartImportConfirmContainer,
+    clientChartImportConfirm,
+    openImportedClientLink,
+    downloadClientChartImportReportButton,
+    clientChartImportSummary,
     clientChartPdfFiles,
     parseClientChartPdfsButton,
     downloadClientChartPdfJsonButton,
@@ -1375,8 +1504,128 @@ function getPopupElements(): PopupElements {
   };
 }
 
+type ClientChartView = "menu" | "snapshot" | "import" | "pdf";
+
+interface ClientChartViewDefinition {
+  label: string;
+  feature: keyof AcFeatureFlags;
+}
+
+const CLIENT_CHART_VIEWS: Record<Exclude<ClientChartView, "menu">, ClientChartViewDefinition> = {
+  snapshot: { label: "Structured client snapshot", feature: "clientChartSnapshot" },
+  import: { label: "Create client from JSON", feature: "clientChartImport" },
+  pdf: { label: "Batch PDF parser", feature: "clientChartPdfParser" }
+};
+
+const CLIENT_CHART_MENU_SUBTITLE = "Choose the workspace you need.";
+
+function isClientChartViewEnabled(view: ClientChartView): boolean {
+  return view === "menu" || AC_FEATURE_FLAGS[CLIENT_CHART_VIEWS[view].feature];
+}
+
+function requireClientChartFeature(view: Exclude<ClientChartView, "menu">): void {
+  if (!isClientChartViewEnabled(view)) {
+    throw new Error(disabledFeatureMessage(CLIENT_CHART_VIEWS[view].label));
+  }
+}
+
+function showClientChartView(view: ClientChartView): void {
+  const target = isClientChartViewEnabled(view) ? view : "menu";
+  clientChartView = target;
+
+  elements.clientChartViews.forEach((element, key) => {
+    element.hidden = key !== target;
+  });
+
+  setDetailSubtitle(
+    target === "menu" ? CLIENT_CHART_MENU_SUBTITLE : CLIENT_CHART_VIEWS[target].label
+  );
+
+  if (target === "menu") {
+    applyClientChartGuard();
+  }
+}
+
+/**
+ * Disabled sub-tools stay visible but unreachable, so the flag state is
+ * obvious rather than a silently missing entry point.
+ */
+function applyClientChartGuard(): void {
+  const confirmed = elements.clientChartSyntheticConfirm.checked;
+
+  for (const button of elements.clientChartNavButtons) {
+    const view = button.dataset.chartNav as ClientChartView | undefined;
+    if (!view || view === "menu") {
+      continue;
+    }
+    const enabled = isClientChartViewEnabled(view);
+    button.disabled = !enabled || !confirmed;
+    button.title = enabled
+      ? confirmed
+        ? CLIENT_CHART_VIEWS[view].label
+        : "Confirm synthetic UAT data to open this workspace."
+      : disabledFeatureMessage(CLIENT_CHART_VIEWS[view].label);
+    renderClientChartNavBadge(button, enabled);
+  }
+
+  elements.inspectClientChartButton.disabled = !confirmed;
+  elements.clientChartSearchInput.disabled = !confirmed;
+  elements.searchClientChartsButton.disabled =
+    !confirmed || elements.clientChartSearchInput.value.trim().length < 2;
+  elements.clientChartRankLimit.disabled = !confirmed;
+  elements.rankClientChartsButton.disabled = !confirmed;
+  elements.clientChartImportFile.disabled = !confirmed;
+  elements.previewClientChartImportButton.disabled =
+    !confirmed || (elements.clientChartImportFile.files?.length ?? 0) === 0;
+  elements.clientChartPdfFiles.disabled = !confirmed;
+  elements.parseClientChartPdfsButton.disabled =
+    !confirmed || (elements.clientChartPdfFiles.files?.length ?? 0) === 0;
+
+  if (!confirmed) {
+    resetClientChartWorkspaces();
+  } else if (clientChartSearchResults.length === 0) {
+    renderClientChartSearchResults("Search by name or AlayaCare ID, or rank the fullest charts.");
+  }
+}
+
+function renderClientChartNavBadge(button: HTMLButtonElement, enabled: boolean): void {
+  const title = button.querySelector("strong");
+  if (!title) {
+    return;
+  }
+  const existing = title.querySelector(".utility-option__badge");
+  if (enabled) {
+    existing?.remove();
+    return;
+  }
+  if (existing) {
+    return;
+  }
+  const badge = document.createElement("span");
+  badge.className = "utility-option__badge";
+  badge.textContent = "Off";
+  title.append(badge);
+}
+
+function resetClientChartWorkspaces(): void {
+  clientChartSnapshot = null;
+  clientChartPdfSnapshot = null;
+  clientChartSearchResults = [];
+  clientChartRankings.clear();
+  elements.clientChartSearchInput.value = "";
+  elements.clientChartPdfFiles.value = "";
+  resetClientChartImport();
+  elements.downloadClientChartButton.disabled = true;
+  elements.downloadClientChartPdfJsonButton.disabled = true;
+  elements.clientChartSummary.textContent =
+    "Search for a client, or inspect the chart open on the active tab.";
+  renderClientChartSearchResults("Confirm synthetic UAT data to enable client search.");
+  elements.clientChartPdfSummary.textContent = "Select one or more AlayaCare batch PDFs.";
+}
+
 async function searchClientCharts(): Promise<void> {
   await withResult(async () => {
+    requireClientChartFeature("snapshot");
     if (!elements.clientChartSyntheticConfirm.checked) {
       throw new Error("Confirm synthetic UAT data before searching for clients.");
     }
@@ -1426,6 +1675,7 @@ async function searchClientCharts(): Promise<void> {
 
 async function rankClientCharts(): Promise<void> {
   await withResult(async () => {
+    requireClientChartFeature("snapshot");
     if (!elements.clientChartSyntheticConfirm.checked) {
       throw new Error("Confirm synthetic UAT data before ranking client charts.");
     }
@@ -1617,6 +1867,7 @@ function setClientChartResultButtonsDisabled(disabled: boolean): void {
 
 async function inspectActiveClientChart(clientId?: number): Promise<void> {
   await withResult(async () => {
+    requireClientChartFeature("snapshot");
     elements.inspectClientChartButton.disabled = true;
     elements.clientChartSearchInput.disabled = true;
     elements.searchClientChartsButton.disabled = true;
@@ -1688,8 +1939,265 @@ function downloadClientChartJson(snapshot: ClientChartExportSnapshot): void {
   downloadFile(`${JSON.stringify(snapshot, null, 2)}\n`, "application/json", filename);
 }
 
+function resetClientChartImport(): void {
+  clientChartImportPreview = null;
+  clientChartImportResult = null;
+  elements.clientChartImportFile.value = "";
+  elements.clientChartImportFile.disabled = true;
+  elements.previewClientChartImportButton.disabled = true;
+  resetClientChartImportPreviewUi();
+  elements.clientChartImportSummary.textContent =
+    "Select an AC Tools client-chart JSON export.";
+}
+
+function resetClientChartImportPreviewUi(): void {
+  elements.clientChartImportTarget.hidden = true;
+  elements.clientChartImportFirstName.value = "";
+  elements.clientChartImportFirstName.disabled = true;
+  elements.clientChartImportLastName.value = "";
+  elements.clientChartImportLastName.disabled = true;
+  elements.clientChartImportSections.hidden = true;
+  elements.clientChartImportSections.disabled = true;
+  elements.clientChartImportMedicalHistory.checked = false;
+  elements.clientChartImportMedicalHistory.disabled = true;
+  elements.clientChartImportRiskAssessment.checked = false;
+  elements.clientChartImportRiskAssessment.disabled = true;
+  elements.clientChartImportConfirmContainer.hidden = true;
+  elements.clientChartImportConfirm.checked = false;
+  elements.clientChartImportConfirm.disabled = true;
+  elements.createClientChartImportButton.disabled = true;
+  elements.openImportedClientLink.hidden = true;
+  elements.openImportedClientLink.removeAttribute("href");
+  elements.downloadClientChartImportReportButton.disabled = true;
+}
+
+async function previewClientChartImport(): Promise<void> {
+  await withResult(async () => {
+    requireClientChartFeature("import");
+    const file = elements.clientChartImportFile.files?.[0];
+    if (!elements.clientChartSyntheticConfirm.checked) {
+      throw new Error("Confirm synthetic UAT data before previewing a chart import.");
+    }
+    if (!file) throw new Error("Choose an AC Tools client-chart JSON export.");
+
+    elements.previewClientChartImportButton.disabled = true;
+    elements.clientChartImportSummary.textContent = "Validating the selected JSON locally…";
+    try {
+      const raw = JSON.parse(await file.text()) as unknown;
+      const preview = buildClientChartImportPreview(raw);
+      clientChartImportPreview = preview;
+      clientChartImportResult = null;
+
+      elements.clientChartImportTarget.hidden = false;
+      elements.clientChartImportFirstName.disabled = false;
+      elements.clientChartImportFirstName.value = preview.suggestedFirstName;
+      elements.clientChartImportLastName.disabled = false;
+      elements.clientChartImportLastName.value = preview.suggestedLastName;
+      elements.clientChartImportSections.hidden = false;
+      elements.clientChartImportSections.disabled = false;
+      elements.clientChartImportMedicalHistory.disabled = !preview.medicalHistory.available;
+      elements.clientChartImportMedicalHistory.checked = preview.medicalHistory.available;
+      elements.clientChartImportRiskAssessment.disabled = !preview.riskAssessment.available;
+      elements.clientChartImportRiskAssessment.checked = preview.riskAssessment.available;
+      elements.clientChartImportConfirmContainer.hidden = false;
+      elements.clientChartImportConfirm.disabled = false;
+      elements.clientChartImportConfirm.checked = false;
+      elements.clientChartImportSummary.textContent = buildClientChartImportPreviewSummary(preview);
+      updateClientChartImportCreateAvailability();
+      return [
+        `Validated the chart export for ${preview.sourceClientName}.`,
+        "Review the new synthetic name and supported sections before creating the client."
+      ].join("\n");
+    } catch (error) {
+      clientChartImportPreview = null;
+      resetClientChartImportPreviewUi();
+      elements.clientChartImportSummary.textContent = formatError(error);
+      throw error;
+    } finally {
+      elements.previewClientChartImportButton.disabled =
+        !elements.clientChartSyntheticConfirm.checked ||
+        (elements.clientChartImportFile.files?.length ?? 0) === 0;
+    }
+  });
+}
+
+function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview): string {
+  const supported = [
+    `Medical history: ${preview.medicalHistory.available ? `${preview.medicalHistory.recordCount} populated values` : "not available"}`,
+    `Risk assessment: ${preview.riskAssessment.available ? `${preview.riskAssessment.recordCount} risks` : "not available"}`
+  ];
+  return [
+    `Source: ${preview.sourceClientName} (Client ${preview.sourceClientId})`,
+    `Tenant: ${preview.sourceTenantOrigin}`,
+    `Birthday: ${preview.birthday ?? "not copied"}`,
+    "",
+    "Supported in this version:",
+    ...supported.map((value) => `- ${value}`),
+    "",
+    "Populated sections reported but not imported:",
+    ...(preview.unsupportedPopulatedSections.length > 0
+      ? preview.unsupportedPopulatedSections.map((name) => `- ${name}`)
+      : ["- none detected"]),
+    "",
+    "Always omitted:",
+    ...preview.omittedIdentityFields.map((name) => `- ${name}`)
+  ].join("\n");
+}
+
+function updateClientChartImportCreateAvailability(): void {
+  const firstName = elements.clientChartImportFirstName.value.trim();
+  const lastName = elements.clientChartImportLastName.value.trim();
+  const hasSelectedConditions =
+    elements.clientChartImportMedicalHistory.checked ||
+    elements.clientChartImportRiskAssessment.checked;
+  elements.createClientChartImportButton.disabled = !(
+    clientChartImportPreview &&
+    elements.clientChartSyntheticConfirm.checked &&
+    elements.clientChartImportConfirm.checked &&
+    firstName &&
+    lastName &&
+    isSyntheticClientName(firstName, lastName) &&
+    hasSelectedConditions
+  );
+}
+
+async function createClientChartImport(): Promise<void> {
+  await withResult(async () => {
+    requireClientChartFeature("import");
+    const preview = clientChartImportPreview;
+    if (!preview) throw new Error("Preview a valid client-chart JSON before creating a client.");
+    if (!elements.clientChartImportConfirm.checked) {
+      throw new Error("Confirm that this operation creates a new synthetic UAT client.");
+    }
+
+    const firstName = elements.clientChartImportFirstName.value.trim();
+    const lastName = elements.clientChartImportLastName.value.trim();
+    if (!isSyntheticClientName(firstName, lastName)) {
+      throw new Error("The new client name must include Test, Synthetic, UAT, Clone, or Copy.");
+    }
+
+    const selectedSections = [
+      elements.clientChartImportMedicalHistory.checked ? "medical history" : "",
+      elements.clientChartImportRiskAssessment.checked ? "risk assessment" : ""
+    ].filter(Boolean);
+    const confirmed = window.confirm(
+      [
+        `Create a new synthetic client named ${firstName} ${lastName}?`,
+        "",
+        `Destination: ${preview.sourceTenantOrigin}`,
+        `Copy: ${selectedSections.join(" and ")}`,
+        "",
+        "This creates a new record and cannot be undone by AC Tools."
+      ].join("\n")
+    );
+    if (!confirmed) return "Client creation cancelled.";
+
+    setClientChartImportControlsDisabled(true);
+    clientChartImportResult = null;
+    elements.clientChartImportSummary.textContent =
+      "Creating the synthetic UAT client and applying selected conditions…";
+    try {
+      const response = await sendRuntimeMessage<ClientChartImportResult>({
+        type: "ac/popup/import-client-chart",
+        payload: {
+          confirmedSynthetic: elements.clientChartSyntheticConfirm.checked,
+          confirmedCreate: elements.clientChartImportConfirm.checked,
+          sourceTenantOrigin: preview.sourceTenantOrigin,
+          sourceClientId: preview.sourceClientId,
+          sourceClientName: preview.sourceClientName,
+          targetFirstName: firstName,
+          targetLastName: lastName,
+          birthday: preview.birthday,
+          medicalHistoryData: elements.clientChartImportMedicalHistory.checked
+            ? preview.medicalHistory.data
+            : undefined,
+          riskAssessmentData: elements.clientChartImportRiskAssessment.checked
+            ? preview.riskAssessment.data
+            : undefined
+        }
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error ?? "Unable to create the synthetic UAT client.");
+      }
+
+      clientChartImportResult = response.data;
+      elements.clientChartImportSummary.textContent = buildClientChartImportResultSummary(
+        response.data
+      );
+      elements.openImportedClientLink.href = response.data.targetClient.url;
+      elements.openImportedClientLink.hidden = false;
+      elements.downloadClientChartImportReportButton.disabled = false;
+      elements.clientChartImportConfirm.checked = false;
+      if (response.data.counts.failed > 0) {
+        showToast(
+          "warning",
+          "Client created with import warnings",
+          `${response.data.counts.failed} selected condition section failed. Download the report for details.`
+        );
+      } else {
+        showToast(
+          "success",
+          "Synthetic client created",
+          `${response.data.targetClient.fullName} was created with the selected conditions.`
+        );
+      }
+      return [
+        `Created ${response.data.targetClient.fullName} (Client ${response.data.targetClient.id}).`,
+        `${response.data.counts.successful}/${response.data.counts.requested} import steps succeeded.`
+      ].join("\n");
+    } catch (error) {
+      elements.clientChartImportSummary.textContent = formatError(error);
+      throw error;
+    } finally {
+      setClientChartImportControlsDisabled(false);
+      updateClientChartImportCreateAvailability();
+    }
+  });
+}
+
+function setClientChartImportControlsDisabled(disabled: boolean): void {
+  const confirmed = elements.clientChartSyntheticConfirm.checked;
+  elements.clientChartImportFile.disabled = disabled || !confirmed;
+  elements.previewClientChartImportButton.disabled =
+    disabled || !confirmed || (elements.clientChartImportFile.files?.length ?? 0) === 0;
+  elements.clientChartImportFirstName.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportLastName.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportSections.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportConfirm.disabled = disabled || !clientChartImportPreview;
+  elements.createClientChartImportButton.disabled = disabled;
+}
+
+function buildClientChartImportResultSummary(result: ClientChartImportResult): string {
+  const steps = result.steps.map(
+    (step) =>
+      `- ${step.section}: ${step.ok ? `success${step.status ? ` (${step.status})` : ""}` : `failed — ${step.error ?? "unknown error"}`}`
+  );
+  return [
+    `Created: ${result.targetClient.fullName}`,
+    `Client ID: ${result.targetClient.id}`,
+    `Route ID: ${result.targetClient.routeId}`,
+    `Steps: ${result.counts.successful}/${result.counts.requested} successful`,
+    "",
+    ...steps,
+    "",
+    "Not imported: medications, contacts, notes, services, care plans, forms, tasks, documents, or attachments."
+  ].join("\n");
+}
+
+function downloadClientChartImportReport(result: ClientChartImportResult): void {
+  const tenant = safeTenantName(result.tenantOrigin);
+  const client = safeFileNamePart(result.targetClient.fullName) || `client-${result.targetClient.id}`;
+  const date = result.importedAt.slice(0, 10);
+  downloadFile(
+    `${JSON.stringify(result, null, 2)}\n`,
+    "application/json",
+    `alayacare-client-import-${tenant}-${client}-${date}.json`
+  );
+}
+
 async function parseSelectedClientChartPdfs(): Promise<void> {
   await withResult(async () => {
+    requireClientChartFeature("pdf");
     if (!elements.clientChartSyntheticConfirm.checked) {
       throw new Error("Confirm that the selected PDFs contain synthetic UAT data.");
     }
@@ -1942,19 +2450,5 @@ function setFieldValue(fieldId: keyof AvailabilityDraft, value: string): void {
   const field = document.querySelector<HTMLInputElement>(`#${fieldId}`);
   if (field) {
     field.value = value;
-  }
-}
-
-async function withResult(action: () => Promise<string>): Promise<void> {
-  elements.resultText.textContent = "Working\u2026";
-
-  try {
-    const message = await action();
-    elements.resultText.textContent = message;
-    showToast("success", "Completed", message.length > 240 ? `${message.slice(0, 237)}…` : message);
-  } catch (error) {
-    const message = formatError(error);
-    elements.resultText.textContent = message;
-    showToast("error", "Action failed", message);
   }
 }

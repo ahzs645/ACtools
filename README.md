@@ -20,7 +20,9 @@ To update later, download the next release zip, replace the folder contents, and
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
 - `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON, CSV, or a styled Excel workbook
-- `Client Chart Export` for searching or inspecting synthetic UAT clients and downloading a structured, source-attributed JSON snapshot, with section-level failures and attachment metadata but no attachment binaries
+- `Client Chart Export`, a menu of three workspaces — structured client snapshot, client creation from JSON, and batch PDF parsing — behind a single synthetic-UAT confirmation
+- the structured client snapshot searches or inspects synthetic UAT clients and downloads a source-attributed JSON snapshot with section-level failures and attachment metadata but no attachment binaries (**disabled by default**, see [Feature flags](#feature-flags))
+- guarded UAT-only client creation from an AC Tools chart JSON export, with a new test-marked identity and optional sanitized medical-history and risk-assessment copying
 - local parsing of AlayaCare client-chart batch PDFs into JSON with reconstructed page text, report groups, client identifiers, batch dates, and visit-day/visit-ID indexes
 - `Connector Utilities` for scenario backup and JSON editing, read-only operations health, semantic blueprint audits, draft/published comparison, and sanitized inventories of Templates, Connections, Webhooks, Functions, Keys, Data Stores, and Data Structures
 - `Employee Manager` for authenticated employee search, session caching, configurable sorting, details, status updates, audit notes, and guarded cross-tenant employee copying
@@ -51,24 +53,54 @@ The CSV and Excel exports follow the maintained reference columns from `SubSubSe
 
 ### Inspect a synthetic UAT client chart
 
+This workspace ships disabled. Enable `clientChartSnapshot` in `src/shared/featureFlags.ts` and
+rebuild before following these steps; see [Feature flags](#feature-flags).
+
 1. Open an authenticated AlayaCare UAT tenant. You may remain on any supported page or open a synthetic client chart.
-2. Open AC Tools and select **Client Chart Export**.
-3. Confirm that clients you search or inspect are synthetic/test data.
-4. Search by client name or AlayaCare ID and choose **Inspect chart** on a result, or select **Inspect active client** for the currently open chart.
+2. Open AC Tools and select **Client Chart Export**, then confirm **Synthetic UAT data only** to unlock the workspaces.
+3. Choose **Structured client snapshot**.
+4. Search by client name or AlayaCare ID and choose **Inspect chart** on a result, or select **Inspect chart** for the chart open on the active tab.
 5. Review the client identifiers, section coverage, and any endpoint failures.
 6. Select **Download JSON** to save the structured snapshot locally.
 
 To locate richer synthetic charts, choose a 10- or 25-client deep-scan limit and select
-**Find fullest charts**. The utility reviews the active-client pool, preselects metadata-rich
+**Rank charts**. The utility reviews the active-client pool, preselects metadata-rich
 candidates, and ranks the bounded deep scan by populated patient-chart sections and capped
 record counts. This is a practical test-data finder rather than a guarantee across every client.
 
 The snapshot contains client records and must be handled accordingly. The utility is UAT-only,
 does not upload data, and exports attachment metadata without downloading attachment file contents.
 
-For batch exports, use the PDF section in the same utility: confirm synthetic UAT data,
-select one or more PDFs, choose **Parse selected PDFs**, and download the locally parsed JSON.
-The files are processed inside the extension and are not uploaded.
+To create a synthetic test client from a downloaded snapshot, open **Create client from JSON**,
+select the file, review the proposed test-marked name and supported sections, and
+confirm the create operation. AC Tools creates a new client in the currently authenticated UAT
+tenant, then copies sanitized medical-history and risk-assessment data into that new client's own
+clinical documents. The source client ID/GUID, health-card and external identifiers, contact and
+address details, attachment contents, authors, timestamps, and document IDs/versions are omitted.
+The source and destination tenant origins must match.
+
+This first import version does not clone contacts, notes, services, care plans, forms, tasks,
+medications, documents, or attachments. Those sections need tenant-specific reference mapping or
+can trigger operational workflows, so the import preview reports them as omitted instead.
+
+For batch exports, open the **Batch PDF parser** workspace: select one or more PDFs, choose
+**Parse PDFs**, and download the locally parsed JSON. The files are processed inside the
+extension and are not uploaded.
+
+### Feature flags
+
+`src/shared/featureFlags.ts` holds the build-time flags. Flip a value, run `npm run build`, and
+reload the extension:
+
+| Flag | Default | Covers |
+| --- | --- | --- |
+| `clientChartSnapshot` | `false` | Structured client snapshot: client search, chart ranking, and live chart reads |
+| `clientChartImport` | `true` | Create client from JSON |
+| `clientChartPdfParser` | `true` | Batch PDF parser |
+
+A disabled workspace stays visible in the Client Chart Export menu with an `Off` badge but cannot
+be opened, and the background service worker refuses the matching messages, so a stale side panel
+cannot reach it either.
 
 For a data-first conversion with normalized care plans, medications, MAR months, visits,
 visit metrics, and visit forms, run `scripts/parse_alayacare_chart_pdf.py` with one or more
