@@ -1,4 +1,43 @@
-node_modules
-dist
-releases
+# Dependencies
+/node_modules/
+
+# Build and packaged extension artifacts
+/dist/
+/releases/
+
+# Generated patient-chart data and local scratch files
+/output/
+/tmp/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and test/tool caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+/coverage/
+/.cache/
+/.eslintcache
+
+# Python parser environments and caches
+/.venv/
+/venv/
+__pycache__/
+*.py[cod]
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+
+# Editor and operating-system metadata
 .DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
+*.swp
+*.swo
