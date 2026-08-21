@@ -705,8 +705,8 @@
               <p>Chrome-native AlayaCare utilities with tenant-scoped credentials and guarded write workflows.</p>
               <h4>Recent changes</h4>
               <ul class="changelog-list">
+                <li>Settings → Optional tools toggles each Client Chart Export workspace per install</li>
                 <li>Client Chart Export split into snapshot, JSON client creation, and batch PDF workspaces</li>
-                <li>Build-time feature flags; the structured client snapshot ships disabled</li>
                 <li>Guarded UAT client creation from a chart JSON export with sanitized condition copying</li>
                 <li>Consistent fields, single-line buttons, and results scoped to their own section</li>
                 <li>Environment registry, import/export, default tenant, and endpoint health checks</li>
@@ -1447,6 +1447,40 @@
                   <span class="radio__indicator" aria-hidden="true"></span>
                   <span class="radio__label">
                     <span class="radio__title">Dark</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <span class="section-label">Optional tools</span>
+              <p class="settings-hint settings-hint--muted">
+                Turn Client Chart Export workspaces on or off. A tool that is off is hidden in the
+                menu and its requests are refused, so nothing reaches the tenant.
+              </p>
+              <div class="settings-form">
+                <label class="check-field">
+                  <input type="checkbox" data-feature-flag="clientChartSnapshot" />
+                  <span>
+                    <strong>Structured client snapshot</strong>
+                    <small>
+                      Searches, ranks, and reads live client charts on the signed-in AlayaCare UAT
+                      tenant. Off by default.
+                    </small>
+                  </span>
+                </label>
+                <label class="check-field">
+                  <input type="checkbox" data-feature-flag="clientChartImport" />
+                  <span>
+                    <strong>Create client from JSON</strong>
+                    <small>Creates a new synthetic client on the active UAT tenant from a chart export.</small>
+                  </span>
+                </label>
+                <label class="check-field">
+                  <input type="checkbox" data-feature-flag="clientChartPdfParser" />
+                  <span>
+                    <strong>Batch PDF parser</strong>
+                    <small>Parses AlayaCare batch PDFs inside the extension. Makes no tenant requests.</small>
                   </span>
                 </label>
               </div>

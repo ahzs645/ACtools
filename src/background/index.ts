@@ -7,7 +7,11 @@ import type {
   ClientChartSearchResponse
 } from "../shared/clientChart";
 import type { ClientChartImportResult } from "../shared/clientChartImport";
-import { AC_FEATURE_FLAGS, disabledFeatureMessage } from "../shared/featureFlags";
+import {
+  disabledFeatureMessage,
+  loadFeatureFlags,
+  type AcFeatureFlag
+} from "../shared/featureFlags";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -132,6 +136,26 @@ async function initialize(): Promise<void> {
   await applySurface(currentSurface);
 }
 
+/** Popup messages that an optional tool owns, and the flag that gates them. */
+const FEATURE_GATED_MESSAGES: Record<string, AcFeatureFlag> = {
+  "ac/popup/search-client-charts": "clientChartSnapshot",
+  "ac/popup/rank-client-charts": "clientChartSnapshot",
+  "ac/popup/export-active-client-chart": "clientChartSnapshot",
+  "ac/popup/import-client-chart": "clientChartImport"
+};
+
+async function refuseDisabledFeature(
+  messageType: string
+): Promise<CommandResult<PopupResponseData> | null> {
+  const flag = FEATURE_GATED_MESSAGES[messageType];
+  if (!flag) {
+    return null;
+  }
+
+  const flags = await loadFeatureFlags();
+  return flags[flag] ? null : { ok: false, error: disabledFeatureMessage(flag) };
+}
+
 async function handlePopupMessage(
   message: Extract<RuntimeMessage, { type: `ac/popup/${string}` }>
 ): Promise<CommandResult<PopupResponseData>> {
@@ -139,6 +163,11 @@ async function handlePopupMessage(
     await chrome.storage.local.set({ [SURFACE_STORAGE_KEY]: message.payload });
     await applySurface(message.payload);
     return { ok: true };
+  }
+
+  const refusal = await refuseDisabledFeature(message.type);
+  if (refusal) {
+    return refusal;
   }
 
   const tabId = await getActiveTabId();
@@ -157,33 +186,21 @@ async function handlePopupMessage(
         type: "ac/content/export-form-context-catalog"
       });
     case "ac/popup/search-client-charts":
-      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
-        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
-      }
       return sendMessageToTab<ClientChartSearchResponse>(tabId, {
         type: "ac/content/search-client-charts",
         payload: message.payload
       });
     case "ac/popup/rank-client-charts":
-      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
-        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
-      }
       return sendMessageToTab<ClientChartRankResponse>(tabId, {
         type: "ac/content/rank-client-charts",
         payload: message.payload
       });
     case "ac/popup/export-active-client-chart":
-      if (!AC_FEATURE_FLAGS.clientChartSnapshot) {
-        return { ok: false, error: disabledFeatureMessage("Structured client snapshot") };
-      }
       return sendMessageToTab<ClientChartExportSnapshot>(tabId, {
         type: "ac/content/export-active-client-chart",
         payload: message.payload
       });
     case "ac/popup/import-client-chart":
-      if (!AC_FEATURE_FLAGS.clientChartImport) {
-        return { ok: false, error: disabledFeatureMessage("Create client from JSON") };
-      }
       return sendMessageToTab<ClientChartImportResult>(tabId, {
         type: "ac/content/import-client-chart",
         payload: message.payload

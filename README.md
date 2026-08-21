@@ -21,7 +21,7 @@ To update later, download the next release zip, replace the folder contents, and
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
 - `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON, CSV, or a styled Excel workbook
 - `Client Chart Export`, a menu of three workspaces — structured client snapshot, client creation from JSON, and batch PDF parsing — behind a single synthetic-UAT confirmation
-- the structured client snapshot searches or inspects synthetic UAT clients and downloads a source-attributed JSON snapshot with section-level failures and attachment metadata but no attachment binaries (**disabled by default**, see [Feature flags](#feature-flags))
+- the structured client snapshot searches or inspects synthetic UAT clients and downloads a source-attributed JSON snapshot with section-level failures and attachment metadata but no attachment binaries (**off by default**, see [Optional tools](#optional-tools))
 - guarded UAT-only client creation from an AC Tools chart JSON export, with a new test-marked identity and optional sanitized medical-history and risk-assessment copying
 - local parsing of AlayaCare client-chart batch PDFs into JSON with reconstructed page text, report groups, client identifiers, batch dates, and visit-day/visit-ID indexes
 - `Connector Utilities` for scenario backup and JSON editing, read-only operations health, semantic blueprint audits, draft/published comparison, and sanitized inventories of Templates, Connections, Webhooks, Functions, Keys, Data Stores, and Data Structures
@@ -53,8 +53,8 @@ The CSV and Excel exports follow the maintained reference columns from `SubSubSe
 
 ### Inspect a synthetic UAT client chart
 
-This workspace ships disabled. Enable `clientChartSnapshot` in `src/shared/featureFlags.ts` and
-rebuild before following these steps; see [Feature flags](#feature-flags).
+This workspace is off by default. Turn on **Structured client snapshot** in
+**Settings → Optional tools** before following these steps; see [Optional tools](#optional-tools).
 
 1. Open an authenticated AlayaCare UAT tenant. You may remain on any supported page or open a synthetic client chart.
 2. Open AC Tools and select **Client Chart Export**, then confirm **Synthetic UAT data only** to unlock the workspaces.
@@ -87,20 +87,24 @@ For batch exports, open the **Batch PDF parser** workspace: select one or more P
 **Parse PDFs**, and download the locally parsed JSON. The files are processed inside the
 extension and are not uploaded.
 
-### Feature flags
+### Optional tools
 
-`src/shared/featureFlags.ts` holds the build-time flags. Flip a value, run `npm run build`, and
-reload the extension:
+Each Client Chart Export workspace can be turned on or off from **Settings → Optional tools**.
+The choice is stored per install in `chrome.storage.local`, so it survives a reload and needs no
+rebuild.
 
-| Flag | Default | Covers |
+| Tool | Default | Covers |
 | --- | --- | --- |
-| `clientChartSnapshot` | `false` | Structured client snapshot: client search, chart ranking, and live chart reads |
-| `clientChartImport` | `true` | Create client from JSON |
-| `clientChartPdfParser` | `true` | Batch PDF parser |
+| Structured client snapshot | off | Client search, chart ranking, and live chart reads |
+| Create client from JSON | on | Guarded synthetic client creation |
+| Batch PDF parser | on | Local batch-PDF parsing |
 
-A disabled workspace stays visible in the Client Chart Export menu with an `Off` badge but cannot
-be opened, and the background service worker refuses the matching messages, so a stale side panel
-cannot reach it either.
+A tool that is off stays visible in the Client Chart Export menu with an `Off` badge but cannot be
+opened, and the background service worker refuses its messages, so a stale side panel cannot reach
+it either. Nothing reaches the tenant while a tool is off.
+
+The shipped defaults live in `DEFAULT_FEATURE_FLAGS` in `src/shared/featureFlags.ts`; change them
+there to alter what a fresh install starts with.
 
 For a data-first conversion with normalized care plans, medications, MAR months, visits,
 visit metrics, and visit forms, run `scripts/parse_alayacare_chart_pdf.py` with one or more

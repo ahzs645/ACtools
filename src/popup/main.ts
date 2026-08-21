@@ -28,7 +28,15 @@ import type {
   EmployeeWriteResult
 } from "../shared/employees";
 import type { AppPreferences } from "../shared/environments";
-import { AC_FEATURE_FLAGS, disabledFeatureMessage, type AcFeatureFlags } from "../shared/featureFlags";
+import {
+  DEFAULT_FEATURE_FLAGS,
+  FEATURE_FLAG_LABELS,
+  disabledFeatureMessage,
+  loadFeatureFlags,
+  saveFeatureFlags,
+  type AcFeatureFlag,
+  type AcFeatureFlags
+} from "../shared/featureFlags";
 import { EnvironmentManagerController } from "./features/environments/controller";
 import { ConnectorUtilitiesController } from "./features/connectors/controller";
 import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
@@ -94,6 +102,7 @@ let clientChartImportPreview: ClientChartImportPreview | null = null;
 let clientChartImportResult: ClientChartImportResult | null = null;
 let activePanelName: string | null = null;
 let clientChartView: ClientChartView = "menu";
+let featureFlags: AcFeatureFlags = { ...DEFAULT_FEATURE_FLAGS };
 
 const elements = getPopupElements();
 const environmentManager = new EnvironmentManagerController(async () => {
@@ -123,6 +132,8 @@ async function init(): Promise<void> {
   await environmentManager.init();
   employeeCopyController.init();
   elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
+  featureFlags = await loadFeatureFlags();
+  applyFeatureFlagToggles();
   applyClientChartGuard();
 
   elements.themeToggle.addEventListener("click", () => {
@@ -151,6 +162,12 @@ async function init(): Promise<void> {
 
   elements.clientChartSyntheticConfirm.addEventListener("change", () => {
     applyClientChartGuard();
+  });
+
+  elements.featureFlagToggles.forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      void handleFeatureFlagChange(toggle);
+    });
   });
 
   elements.clientChartNavButtons.forEach((button) => {
@@ -1119,6 +1136,7 @@ interface PopupElements {
   catalogCsvExportButton: HTMLButtonElement;
   catalogXlsxExportButton: HTMLButtonElement;
   clientChartSyntheticConfirm: HTMLInputElement;
+  featureFlagToggles: HTMLInputElement[];
   clientChartViews: Map<ClientChartView, HTMLElement>;
   clientChartNavButtons: HTMLButtonElement[];
   clientChartSearchInput: HTMLInputElement;
@@ -1204,6 +1222,9 @@ function getPopupElements(): PopupElements {
   );
   const clientChartSyntheticConfirm = document.querySelector<HTMLInputElement>(
     "#client-chart-synthetic-confirm"
+  );
+  const featureFlagToggles = Array.from(
+    document.querySelectorAll<HTMLInputElement>("[data-feature-flag]")
   );
   const clientChartViewElements = Array.from(
     document.querySelectorAll<HTMLElement>("[data-chart-view]")
@@ -1356,6 +1377,7 @@ function getPopupElements(): PopupElements {
     !catalogCsvExportButton ||
     !catalogXlsxExportButton ||
     !clientChartSyntheticConfirm ||
+    featureFlagToggles.length === 0 ||
     clientChartViews.size === 0 ||
     clientChartNavButtons.length === 0 ||
     !clientChartSearchInput ||
@@ -1444,6 +1466,7 @@ function getPopupElements(): PopupElements {
     catalogCsvExportButton,
     catalogXlsxExportButton,
     clientChartSyntheticConfirm,
+    featureFlagToggles,
     clientChartViews,
     clientChartNavButtons,
     clientChartSearchInput,
@@ -1520,12 +1543,47 @@ const CLIENT_CHART_VIEWS: Record<Exclude<ClientChartView, "menu">, ClientChartVi
 const CLIENT_CHART_MENU_SUBTITLE = "Choose the workspace you need.";
 
 function isClientChartViewEnabled(view: ClientChartView): boolean {
-  return view === "menu" || AC_FEATURE_FLAGS[CLIENT_CHART_VIEWS[view].feature];
+  return view === "menu" || featureFlags[CLIENT_CHART_VIEWS[view].feature];
 }
 
 function requireClientChartFeature(view: Exclude<ClientChartView, "menu">): void {
   if (!isClientChartViewEnabled(view)) {
-    throw new Error(disabledFeatureMessage(CLIENT_CHART_VIEWS[view].label));
+    throw new Error(disabledFeatureMessage(CLIENT_CHART_VIEWS[view].feature));
+  }
+}
+
+function applyFeatureFlagToggles(): void {
+  for (const toggle of elements.featureFlagToggles) {
+    const flag = toggle.dataset.featureFlag as AcFeatureFlag | undefined;
+    if (flag && flag in featureFlags) {
+      toggle.checked = featureFlags[flag];
+    }
+  }
+}
+
+async function handleFeatureFlagChange(toggle: HTMLInputElement): Promise<void> {
+  const flag = toggle.dataset.featureFlag as AcFeatureFlag | undefined;
+  if (!flag || !(flag in featureFlags)) {
+    return;
+  }
+
+  const previous = featureFlags[flag];
+  try {
+    featureFlags = await saveFeatureFlags({ ...featureFlags, [flag]: toggle.checked });
+    applyFeatureFlagToggles();
+    applyClientChartGuard();
+    if (clientChartView !== "menu" && !isClientChartViewEnabled(clientChartView)) {
+      showClientChartView("menu");
+    }
+    showToast(
+      "success",
+      featureFlags[flag] ? "Tool enabled" : "Tool disabled",
+      `${FEATURE_FLAG_LABELS[flag]} is now ${featureFlags[flag] ? "available" : "hidden"} in Client Chart Export.`
+    );
+  } catch (error) {
+    featureFlags = { ...featureFlags, [flag]: previous };
+    applyFeatureFlagToggles();
+    showToast("error", "Could not save", formatError(error));
   }
 }
 
@@ -1564,7 +1622,7 @@ function applyClientChartGuard(): void {
       ? confirmed
         ? CLIENT_CHART_VIEWS[view].label
         : "Confirm synthetic UAT data to open this workspace."
-      : disabledFeatureMessage(CLIENT_CHART_VIEWS[view].label);
+      : disabledFeatureMessage(CLIENT_CHART_VIEWS[view].feature);
     renderClientChartNavBadge(button, enabled);
   }
 

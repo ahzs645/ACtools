@@ -2306,6 +2306,13 @@ input[type="file"].input::file-selector-button {
   display: none;
 }
 
+.settings-hint--muted {
+  margin: 0 0 var(--ac-space-8);
+  border-color: var(--ac-color-neutral-stroke-subtle);
+  background-color: var(--ac-color-neutral-background-2);
+  color: var(--ac-color-neutral-foreground-3);
+}
+
 #result-container[hidden] {
   display: none;
 }
