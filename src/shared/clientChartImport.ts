@@ -12,6 +12,27 @@ export interface ClientChartImportSectionPreview {
   data?: Record<string, unknown>;
 }
 
+export interface ClientChartDestinationGroup {
+  id: number;
+  name: string;
+  description?: string;
+}
+
+export interface ClientChartDestinationCostCentre {
+  code: string;
+  name: string;
+}
+
+export interface ClientChartDestinationCatalog {
+  tenantOrigin: string;
+  groups: ClientChartDestinationGroup[];
+  costCentres: ClientChartDestinationCostCentre[];
+  sources: {
+    groups: string;
+    costCentres: string;
+  };
+}
+
 export interface ClientChartImportPreview {
   schemaVersion: typeof ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION;
   sourceTenantOrigin: string;
@@ -35,6 +56,8 @@ export interface ClientChartImportRequest {
   targetFirstName: string;
   targetLastName: string;
   birthday?: string;
+  destinationGroupIds: number[];
+  costCentreCode?: string;
   medicalHistoryData?: Record<string, unknown>;
   riskAssessmentData?: Record<string, unknown>;
 }
@@ -52,7 +75,14 @@ export interface ClientChartImportResult {
   importedAt: string;
   tenantOrigin: string;
   sourceClient: { id: number; fullName: string };
-  targetClient: { id: number; routeId: string; fullName: string; url: string };
+  targetClient: {
+    id: number;
+    routeId: string;
+    fullName: string;
+    url: string;
+    destinationGroups: ClientChartDestinationGroup[];
+    costCentre?: ClientChartDestinationCostCentre;
+  };
   steps: ClientChartImportStepResult[];
   counts: { requested: number; successful: number; failed: number };
   scope: {

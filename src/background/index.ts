@@ -6,7 +6,11 @@ import type {
   ClientChartRankResponse,
   ClientChartSearchResponse
 } from "../shared/clientChart";
-import type { ClientChartImportResult } from "../shared/clientChartImport";
+import type {
+  ClientChartDestinationCatalog,
+  ClientChartImportResult
+} from "../shared/clientChartImport";
+import type { ShiftServiceLocationSearchResponse } from "../shared/shiftLab";
 import {
   disabledFeatureMessage,
   loadFeatureFlags,
@@ -77,6 +81,8 @@ type PopupResponseData =
   | ClientChartSearchResponse
   | ClientChartRankResponse
   | ClientChartImportResult
+  | ClientChartDestinationCatalog
+  | ShiftServiceLocationSearchResponse
   | ConnectorScenarioSnapshot
   | ConnectorScenarioBundle
   | ConnectorScenarioBulkDownloadResult
@@ -141,7 +147,8 @@ const FEATURE_GATED_MESSAGES: Record<string, AcFeatureFlag> = {
   "ac/popup/search-client-charts": "clientChartSnapshot",
   "ac/popup/rank-client-charts": "clientChartSnapshot",
   "ac/popup/export-active-client-chart": "clientChartSnapshot",
-  "ac/popup/import-client-chart": "clientChartImport"
+  "ac/popup/import-client-chart": "clientChartImport",
+  "ac/popup/get-client-chart-destinations": "clientChartImport"
 };
 
 async function refuseDisabledFeature(
@@ -203,6 +210,16 @@ async function handlePopupMessage(
     case "ac/popup/import-client-chart":
       return sendMessageToTab<ClientChartImportResult>(tabId, {
         type: "ac/content/import-client-chart",
+        payload: message.payload
+      });
+    case "ac/popup/get-client-chart-destinations":
+      return sendMessageToTab<ClientChartDestinationCatalog>(tabId, {
+        type: "ac/content/get-client-chart-destinations",
+        payload: message.payload
+      });
+    case "ac/popup/search-shift-service-locations":
+      return sendMessageToTab<ShiftServiceLocationSearchResponse>(tabId, {
+        type: "ac/content/search-shift-service-locations",
         payload: message.payload
       });
     case "ac/popup/get-connector-scenario":

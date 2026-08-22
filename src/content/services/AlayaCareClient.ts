@@ -24,10 +24,17 @@ import {
   isSyntheticClientName,
   sanitizeMedicalHistoryForImport,
   sanitizeRiskAssessmentForImport,
+  type ClientChartDestinationCatalog,
+  type ClientChartDestinationCostCentre,
+  type ClientChartDestinationGroup,
   type ClientChartImportRequest,
   type ClientChartImportResult,
   type ClientChartImportStepResult
 } from "../../shared/clientChartImport";
+import type {
+  ShiftServiceLocation,
+  ShiftServiceLocationSearchResponse
+} from "../../shared/shiftLab";
 import type {
   ConnectorBlueprint,
   ConnectorConnectionReference,
@@ -147,6 +154,14 @@ interface ClientListApiResponse {
 
 interface ClientCreateApiResponse extends Record<string, unknown> {
   id?: number | string;
+}
+
+interface ShiftLocationAutocompleteItem extends Record<string, unknown> {
+  id?: number | string;
+  value?: number | string;
+  branch_id?: number | string;
+  label?: string;
+  type?: string;
 }
 
 interface ScheduleRecord {
@@ -778,7 +793,37 @@ export class AlayaCareClient {
       throw new Error("The source birthday must use YYYY-MM-DD format.");
     }
 
-    const createSource = "/api/v1/patients/";
+    const destinationGroupIds = Array.isArray(request.destinationGroupIds)
+      ? [
+          ...new Set(
+            request.destinationGroupIds
+              .map(readPositiveInteger)
+              .filter((id): id is number => id !== undefined)
+          )
+        ]
+      : [];
+    if (destinationGroupIds.length === 0) {
+      throw new Error("Choose at least one destination facility or client group.");
+    }
+    if (destinationGroupIds.length > 25) {
+      throw new Error("A synthetic client can be assigned to at most 25 groups in one import.");
+    }
+
+    const destinations = await this.getClientChartWriteDestinations(request.confirmedSynthetic);
+    const groupsById = new Map(destinations.groups.map((group) => [group.id, group]));
+    const selectedGroups = destinationGroupIds.map((id) => groupsById.get(id));
+    if (selectedGroups.some((group) => !group)) {
+      throw new Error("One or more selected destination groups are no longer available in UAT.");
+    }
+    const costCentreCode = request.costCentreCode?.trim();
+    const selectedCostCentre = costCentreCode
+      ? destinations.costCentres.find((costCentre) => costCentre.code === costCentreCode)
+      : undefined;
+    if (costCentreCode && !selectedCostCentre) {
+      throw new Error("The selected cost centre is no longer available in UAT.");
+    }
+
+    const createSource = "/api/v1/patients/main_clients";
     const createResponse = await fetch(createSource, {
       method: "POST",
       credentials: "include",
@@ -787,9 +832,17 @@ export class AlayaCareClient {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        first_name: firstName,
-        last_name: lastName,
-        ...(request.birthday ? { birthday: request.birthday } : {})
+        profile: {
+          attributes: {
+            first_name: firstName,
+            last_name: lastName,
+            ...(request.birthday ? { birthday: request.birthday } : {}),
+            groups: destinationGroupIds,
+            ...(selectedCostCentre ? { cost_centre: selectedCostCentre.code } : {})
+          },
+          settings: {}
+        },
+        address: {}
       })
     });
     const createBody = await parseResponseBody(createResponse);
@@ -845,7 +898,9 @@ export class AlayaCareClient {
         id: targetClientId,
         routeId,
         fullName: `${firstName} ${lastName}`,
-        url: `${window.location.origin}/#/clients/${routeId}/overview`
+        url: `${window.location.origin}/#/clients/${routeId}/overview`,
+        destinationGroups: selectedGroups as ClientChartDestinationGroup[],
+        ...(selectedCostCentre ? { costCentre: selectedCostCentre } : {})
       },
       steps,
       counts: {
@@ -868,6 +923,117 @@ export class AlayaCareClient {
           "attachments"
         ]
       }
+    };
+  }
+
+  async getClientChartWriteDestinations(
+    confirmedSynthetic: boolean
+  ): Promise<ClientChartDestinationCatalog> {
+    this.assertSyntheticUatClientChartAccess(confirmedSynthetic);
+    const groupSource = withQuery("/api/v1/patients/groups", {
+      page: "1",
+      count: "1000",
+      sort_by: "name",
+      sort_order: "asc",
+      with_count: "false"
+    });
+    const costCentreSource = withQuery("/api/v1/accounting/costcentres", {
+      pagination: "false",
+      status: "enabled"
+    });
+    const [groupResponse, costCentreResponse] = await Promise.all([
+      this.fetchJson<unknown>(groupSource),
+      this.fetchJson<unknown>(costCentreSource)
+    ]);
+
+    const groups = dedupeBy(
+      readCollectionRecords(groupResponse).flatMap<ClientChartDestinationGroup>((record) => {
+        const id = readPositiveInteger(record.id);
+        const name = readNonEmptyString(record.name) ?? readNonEmptyString(record.description);
+        const status = readNonEmptyString(record.status)?.toLowerCase();
+        if (!id || !name || record.is_disabled === true || status === "disabled") return [];
+        const description = readNonEmptyString(record.description);
+        return [{ id, name, ...(description && description !== name ? { description } : {}) }];
+      }),
+      (group) => group.id
+    ).sort((left, right) => left.name.localeCompare(right.name));
+
+    const costCentres = dedupeBy(
+      readCollectionRecords(costCentreResponse).flatMap<ClientChartDestinationCostCentre>(
+        (record) => {
+          const code = readNonEmptyString(record.code);
+          const name = readNonEmptyString(record.name) ?? readNonEmptyString(record.description);
+          const status = readNonEmptyString(record.status)?.toLowerCase();
+          if (!code || !name || status === "disabled") return [];
+          return [{ code, name }];
+        }
+      ),
+      (costCentre) => costCentre.code
+    ).sort((left, right) => left.name.localeCompare(right.name));
+
+    if (groups.length === 0) {
+      throw new Error("No enabled client groups were returned for this UAT tenant.");
+    }
+    return {
+      tenantOrigin: window.location.origin,
+      groups,
+      costCentres,
+      sources: {
+        groups: groupSource,
+        costCentres: costCentreSource
+      }
+    };
+  }
+
+  async searchShiftServiceLocations(
+    query: string,
+    confirmedUat: boolean
+  ): Promise<ShiftServiceLocationSearchResponse> {
+    this.assertUatAccess(confirmedUat, "Confirm that this Shift Lab lookup is for UAT test data.");
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2 || normalizedQuery.length > 100) {
+      throw new Error("Enter 2–100 characters to search service locations.");
+    }
+
+    const accountSource = withRepeatedQuery("/api/autocomplete/patientsFacilities", [
+      ["term", normalizedQuery],
+      ["status[]", "active"]
+    ]);
+    const staffingSource = withQuery("/api/autocomplete/staffings", {
+      term: normalizedQuery
+    });
+    const [accounts, staffings] = await Promise.all([
+      this.fetchJson<ShiftLocationAutocompleteItem[]>(accountSource),
+      this.fetchJson<ShiftLocationAutocompleteItem[]>(staffingSource)
+    ]);
+    const staffingByAccount = new Map<number, number>();
+    for (const item of staffings) {
+      const accountId = readPositiveInteger(item.id);
+      const staffingId = readPositiveInteger(item.value);
+      if (accountId && staffingId) staffingByAccount.set(accountId, staffingId);
+    }
+
+    const items = accounts.flatMap<ShiftServiceLocation>((item) => {
+      if (item.type !== "CustomerStaffingPosition") return [];
+      const accountId = readPositiveInteger(item.id);
+      const branchId = readPositiveInteger(item.branch_id);
+      const label = readNonEmptyString(item.label);
+      if (!accountId || !branchId || !label) return [];
+      return [{
+        tenantOrigin: window.location.origin,
+        accountId,
+        staffingId: staffingByAccount.get(accountId),
+        branchId,
+        label,
+        type: "CustomerStaffingPosition"
+      }];
+    });
+
+    return {
+      query: normalizedQuery,
+      tenantOrigin: window.location.origin,
+      items,
+      sources: [accountSource, staffingSource]
     };
   }
 
@@ -1170,12 +1336,17 @@ export class AlayaCareClient {
   }
 
   private assertSyntheticUatClientChartAccess(confirmedSynthetic: boolean): void {
+    this.assertUatAccess(
+      confirmedSynthetic,
+      "Confirm that the UAT client is synthetic or a test record first."
+    );
+  }
+
+  private assertUatAccess(confirmed: boolean, confirmationMessage: string): void {
     if (!window.location.hostname.toLowerCase().includes(".uat.alayacare.")) {
-      throw new Error("Client Chart Export is currently limited to AlayaCare UAT tenants.");
+      throw new Error("This utility is currently limited to AlayaCare UAT tenants.");
     }
-    if (!confirmedSynthetic) {
-      throw new Error("Confirm that the UAT client is synthetic or a test record first.");
-    }
+    if (!confirmed) throw new Error(confirmationMessage);
   }
 
   private async fetchJson<T>(url: string): Promise<T> {
@@ -1470,6 +1641,32 @@ function readItems(value: unknown): Record<string, unknown>[] {
           Boolean(item) && typeof item === "object" && !Array.isArray(item)
       )
     : [];
+}
+
+function readCollectionRecords(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) && typeof item === "object" && !Array.isArray(item)
+    );
+  }
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  for (const key of ["items", "results", "data"]) {
+    const collection = record[key];
+    if (Array.isArray(collection)) return readCollectionRecords(collection);
+  }
+  return [];
+}
+
+function dedupeBy<T, K>(items: T[], keyFor: (item: T) => K): T[] {
+  const seen = new Set<K>();
+  return items.filter((item) => {
+    const key = keyFor(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 const SCORABLE_CLIENT_CHART_SECTIONS = [

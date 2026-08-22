@@ -4,7 +4,12 @@ import type {
   ClientChartRankResponse,
   ClientChartSearchResponse
 } from "./clientChart";
-import type { ClientChartImportRequest, ClientChartImportResult } from "./clientChartImport";
+import type {
+  ClientChartDestinationCatalog,
+  ClientChartImportRequest,
+  ClientChartImportResult
+} from "./clientChartImport";
+import type { ShiftServiceLocationSearchResponse } from "./shiftLab";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -96,6 +101,14 @@ export type RuntimeMessage =
   | {
       type: "ac/popup/import-client-chart";
       payload: ClientChartImportRequest;
+    }
+  | {
+      type: "ac/popup/get-client-chart-destinations";
+      payload: { confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/popup/search-shift-service-locations";
+      payload: { query: string; confirmedUat: boolean };
     }
   | {
       type: "ac/popup/get-connector-scenario";
@@ -218,6 +231,14 @@ export type RuntimeMessage =
       payload: ClientChartImportRequest;
     }
   | {
+      type: "ac/content/get-client-chart-destinations";
+      payload: { confirmedSynthetic: boolean };
+    }
+  | {
+      type: "ac/content/search-shift-service-locations";
+      payload: { query: string; confirmedUat: boolean };
+    }
+  | {
       type: "ac/content/get-connector-scenario";
       payload: { source: ConnectorScenarioSource; scenarioId?: number };
     }
@@ -259,6 +280,8 @@ export type ContentCommandData =
   | ClientChartSearchResponse
   | ClientChartRankResponse
   | ClientChartImportResult
+  | ClientChartDestinationCatalog
+  | ShiftServiceLocationSearchResponse
   | ConnectorScenarioSnapshot
   | ConnectorScenarioBundle
   | ConnectorScenarioBulkDownloadResult

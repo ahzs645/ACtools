@@ -85,6 +85,21 @@ async function handleContentMessage(
         ok: true,
         data: await client.importClientChart(message.payload)
       };
+    case "ac/content/get-client-chart-destinations":
+      return {
+        ok: true,
+        data: await client.getClientChartWriteDestinations(
+          message.payload.confirmedSynthetic
+        )
+      };
+    case "ac/content/search-shift-service-locations":
+      return {
+        ok: true,
+        data: await client.searchShiftServiceLocations(
+          message.payload.query,
+          message.payload.confirmedUat
+        )
+      };
     case "ac/content/get-connector-scenario":
       return {
         ok: true,

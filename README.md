@@ -19,10 +19,11 @@ To update later, download the next release zip, replace the folder contents, and
 
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
 - `Availability Test` workspace in the side panel that posts a single-day availability entry through the current AlayaCare browser session
+- `Shift Lab` for resolving active UAT service locations and creating validated, unassigned shift and shift-ruleset test records in local extension storage
 - `Field Catalog` utility that manually exports tenant form-context bindings, native/profile input types, and configured options as versioned JSON, CSV, or a styled Excel workbook
 - `Client Chart Export`, a menu of three workspaces — structured client snapshot, client creation from JSON, and batch PDF parsing — behind a single synthetic-UAT confirmation
 - the structured client snapshot searches or inspects synthetic UAT clients and downloads a source-attributed JSON snapshot with section-level failures and attachment metadata but no attachment binaries (**off by default**, see [Optional tools](#optional-tools))
-- guarded UAT-only client creation from an AC Tools chart JSON export, with a new test-marked identity and optional sanitized medical-history and risk-assessment copying
+- guarded UAT-only client creation from an AC Tools chart JSON export, with a new test-marked identity, one-or-more live facility/client-group destinations, an optional cost centre, and sanitized medical-history and risk-assessment copying
 - local parsing of AlayaCare client-chart batch PDFs into JSON with reconstructed page text, report groups, client identifiers, batch dates, and visit-day/visit-ID indexes
 - `Connector Utilities` for scenario backup and JSON editing, read-only operations health, semantic blueprint audits, draft/published comparison, and sanitized inventories of Templates, Connections, Webhooks, Functions, Keys, Data Stores, and Data Structures
 - `Employee Manager` for authenticated employee search, session caching, configurable sorting, details, status updates, audit notes, and guarded cross-tenant employee copying
@@ -72,12 +73,17 @@ The snapshot contains client records and must be handled accordingly. The utilit
 does not upload data, and exports attachment metadata without downloading attachment file contents.
 
 To create a synthetic test client from a downloaded snapshot, open **Create client from JSON**,
-select the file, review the proposed test-marked name and supported sections, and
+select the file, review the proposed test-marked name, choose one or more live UAT facility/client
+groups and an optional cost centre, and review the supported clinical sections before you
 confirm the create operation. AC Tools creates a new client in the currently authenticated UAT
 tenant, then copies sanitized medical-history and risk-assessment data into that new client's own
 clinical documents. The source client ID/GUID, health-card and external identifiers, contact and
 address details, attachment contents, authors, timestamps, and document IDs/versions are omitted.
 The source and destination tenant origins must match.
+
+Multiple destination selections assign a single new client chart to multiple client groups; they
+do not create one chart per facility. AC Tools reloads and validates the destination catalog at
+write time so stale or forged group and cost-centre identifiers are rejected before creation.
 
 This first import version does not clone contacts, notes, services, care plans, forms, tasks,
 medications, documents, or attachments. Those sections need tenant-specific reference mapping or
@@ -86,6 +92,30 @@ can trigger operational workflows, so the import preview reports them as omitted
 For batch exports, open the **Batch PDF parser** workspace: select one or more PDFs, choose
 **Parse PDFs**, and download the locally parsed JSON. The files are processed inside the
 extension and are not uploaded.
+
+### Build an unassigned shift scenario
+
+1. Open an authenticated AlayaCare UAT tenant, then open **Shift Lab**.
+2. Confirm UAT test-data use and search for the service location, such as `Heritage Heights`.
+3. Select the exact active staffing position returned by the tenant.
+4. Optionally save a local ruleset, then review the shift fixture and save the scenario.
+5. Download the last shift or the complete local Shift Lab registry as JSON.
+
+Shift Lab validates the `S##########` and `R##########` identifiers, calculates duration,
+checks pay duration and expiry, and always initializes client/employee cohorts, visits,
+availability, and assignments as empty arrays. Its records remain in this Chrome profile.
+The interface separately evaluates the local fixture and reports native-visit readiness, marking
+unavailable capacity/fatigue checks as not evaluated and missing client/service mappings as
+blockers. Saved records can be inspected, duplicated, copied, deleted, or exported.
+
+AlayaCare's currently exposed scheduler creates client/service visits through
+`/api/v1/scheduler/`; it does not expose the Shift/Ruleset fields represented by this scenario.
+For that reason, Shift Lab does not post these fixtures as native AlayaCare visits or claim that a
+native ruleset was created. This boundary is shown directly in the utility and recorded in every
+shift JSON with `alayaCareNativeRecordCreated: false`.
+
+See [Shift Lab design and test documentation](docs/shift-lab.md) for the complete BDD mapping,
+storage schema, UAT discovery evidence, validation rules, and repeatable test commands.
 
 ### Optional tools
 

@@ -14,6 +14,8 @@ import type { ClientChartPdfParseSnapshot } from "../shared/clientChartPdf";
 import {
   buildClientChartImportPreview,
   isSyntheticClientName,
+  type ClientChartDestinationCatalog,
+  type ClientChartDestinationGroup,
   type ClientChartImportPreview,
   type ClientChartImportResult
 } from "../shared/clientChartImport";
@@ -41,6 +43,7 @@ import { EnvironmentManagerController } from "./features/environments/controller
 import { ConnectorUtilitiesController } from "./features/connectors/controller";
 import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
 import { EmployeeCopyController } from "./features/employees/copyController";
+import { ShiftLabController } from "./features/shifts/controller";
 import {
   type EmployeeSortField,
   type SortDirection,
@@ -100,6 +103,8 @@ let clientChartSearchResults: ClientChartSearchResult[] = [];
 let clientChartRankings = new Map<number, ClientChartRankedResult>();
 let clientChartImportPreview: ClientChartImportPreview | null = null;
 let clientChartImportResult: ClientChartImportResult | null = null;
+let clientChartDestinationCatalog: ClientChartDestinationCatalog | null = null;
+let clientChartSelectedGroupIds = new Set<number>();
 let activePanelName: string | null = null;
 let clientChartView: ClientChartView = "menu";
 let featureFlags: AcFeatureFlags = { ...DEFAULT_FEATURE_FLAGS };
@@ -109,6 +114,7 @@ const environmentManager = new EnvironmentManagerController(async () => {
   await refreshConfiguredEmployeeTenants();
 });
 const connectorUtilities = new ConnectorUtilitiesController();
+const shiftLab = new ShiftLabController();
 const employeeCopyController = new EmployeeCopyController({
   getEmployee: () => selectedEmployee
     ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }
@@ -123,6 +129,7 @@ void init();
 
 async function init(): Promise<void> {
   connectorUtilities.init();
+  await shiftLab.init();
   appPreferences = await loadAppPreferences();
   await applyStoredTheme();
   await applyStoredSurfaceSelection();
@@ -233,11 +240,16 @@ async function init(): Promise<void> {
     elements.clientChartImportLastName,
     elements.clientChartImportMedicalHistory,
     elements.clientChartImportRiskAssessment,
+    elements.clientChartImportCostCentre,
     elements.clientChartImportConfirm
   ]) {
     element.addEventListener("input", updateClientChartImportCreateAvailability);
     element.addEventListener("change", updateClientChartImportCreateAvailability);
   }
+
+  elements.clientChartImportFacilityFilter.addEventListener("input", () => {
+    renderClientChartDestinationGroups();
+  });
 
   elements.downloadClientChartImportReportButton.addEventListener("click", () => {
     if (clientChartImportResult) downloadClientChartImportReport(clientChartImportResult);
@@ -431,6 +443,12 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
     return;
   }
 
+  if (panelName === "shift-lab") {
+    showDetail(title, subtitle, panelName);
+    await shiftLab.open();
+    return;
+  }
+
   if (panelName) {
     showDetail(title, subtitle, panelName);
   }
@@ -449,7 +467,8 @@ function showLauncher(): void {
 const PANELS_WITHOUT_SHARED_RESULT = new Set([
   "settings",
   "connector-utilities",
-  "client-chart-export"
+  "client-chart-export",
+  "shift-lab"
 ]);
 
 function showDetail(title: string, subtitle: string, panelName: string): void {
@@ -1153,6 +1172,11 @@ interface PopupElements {
   clientChartImportTarget: HTMLElement;
   clientChartImportFirstName: HTMLInputElement;
   clientChartImportLastName: HTMLInputElement;
+  clientChartImportDestination: HTMLElement;
+  clientChartImportDestinationCount: HTMLElement;
+  clientChartImportFacilityFilter: HTMLInputElement;
+  clientChartImportFacilities: HTMLElement;
+  clientChartImportCostCentre: HTMLSelectElement;
   clientChartImportSections: HTMLFieldSetElement;
   clientChartImportMedicalHistory: HTMLInputElement;
   clientChartImportRiskAssessment: HTMLInputElement;
@@ -1272,6 +1296,21 @@ function getPopupElements(): PopupElements {
   );
   const clientChartImportLastName = document.querySelector<HTMLInputElement>(
     "#client-chart-import-last-name"
+  );
+  const clientChartImportDestination = document.querySelector<HTMLElement>(
+    ".chart-import__destination"
+  );
+  const clientChartImportDestinationCount = document.querySelector<HTMLElement>(
+    "#client-chart-import-destination-count"
+  );
+  const clientChartImportFacilityFilter = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-facility-filter"
+  );
+  const clientChartImportFacilities = document.querySelector<HTMLElement>(
+    "#client-chart-import-facilities"
+  );
+  const clientChartImportCostCentre = document.querySelector<HTMLSelectElement>(
+    "#client-chart-import-cost-centre"
   );
   const clientChartImportSections = document.querySelector<HTMLFieldSetElement>(
     ".chart-import__sections"
@@ -1394,6 +1433,11 @@ function getPopupElements(): PopupElements {
     !clientChartImportTarget ||
     !clientChartImportFirstName ||
     !clientChartImportLastName ||
+    !clientChartImportDestination ||
+    !clientChartImportDestinationCount ||
+    !clientChartImportFacilityFilter ||
+    !clientChartImportFacilities ||
+    !clientChartImportCostCentre ||
     !clientChartImportSections ||
     !clientChartImportMedicalHistory ||
     !clientChartImportRiskAssessment ||
@@ -1483,6 +1527,11 @@ function getPopupElements(): PopupElements {
     clientChartImportTarget,
     clientChartImportFirstName,
     clientChartImportLastName,
+    clientChartImportDestination,
+    clientChartImportDestinationCount,
+    clientChartImportFacilityFilter,
+    clientChartImportFacilities,
+    clientChartImportCostCentre,
     clientChartImportSections,
     clientChartImportMedicalHistory,
     clientChartImportRiskAssessment,
@@ -2000,6 +2049,8 @@ function downloadClientChartJson(snapshot: ClientChartExportSnapshot): void {
 function resetClientChartImport(): void {
   clientChartImportPreview = null;
   clientChartImportResult = null;
+  clientChartDestinationCatalog = null;
+  clientChartSelectedGroupIds.clear();
   elements.clientChartImportFile.value = "";
   elements.clientChartImportFile.disabled = true;
   elements.previewClientChartImportButton.disabled = true;
@@ -2009,11 +2060,25 @@ function resetClientChartImport(): void {
 }
 
 function resetClientChartImportPreviewUi(): void {
+  clientChartDestinationCatalog = null;
+  clientChartSelectedGroupIds.clear();
   elements.clientChartImportTarget.hidden = true;
   elements.clientChartImportFirstName.value = "";
   elements.clientChartImportFirstName.disabled = true;
   elements.clientChartImportLastName.value = "";
   elements.clientChartImportLastName.disabled = true;
+  elements.clientChartImportDestination.hidden = true;
+  elements.clientChartImportDestinationCount.textContent = "Loading";
+  elements.clientChartImportDestinationCount.dataset.tone = "neutral";
+  elements.clientChartImportFacilityFilter.value = "";
+  elements.clientChartImportFacilityFilter.disabled = true;
+  elements.clientChartImportFacilities.replaceChildren();
+  const destinationPlaceholder = document.createElement("p");
+  destinationPlaceholder.textContent =
+    "Destination groups load after the JSON preview is validated.";
+  elements.clientChartImportFacilities.append(destinationPlaceholder);
+  elements.clientChartImportCostCentre.replaceChildren(new Option("No cost centre", ""));
+  elements.clientChartImportCostCentre.disabled = true;
   elements.clientChartImportSections.hidden = true;
   elements.clientChartImportSections.disabled = true;
   elements.clientChartImportMedicalHistory.checked = false;
@@ -2051,6 +2116,14 @@ async function previewClientChartImport(): Promise<void> {
       elements.clientChartImportFirstName.value = preview.suggestedFirstName;
       elements.clientChartImportLastName.disabled = false;
       elements.clientChartImportLastName.value = preview.suggestedLastName;
+      elements.clientChartImportDestination.hidden = false;
+      elements.clientChartImportDestinationCount.textContent = "Loading";
+      elements.clientChartImportDestinationCount.dataset.tone = "neutral";
+      elements.clientChartImportFacilities.replaceChildren();
+      const loadingDestinations = document.createElement("p");
+      loadingDestinations.textContent = "Loading facilities and client groups from UAT…";
+      elements.clientChartImportFacilities.append(loadingDestinations);
+      await loadClientChartWriteDestinations(preview);
       elements.clientChartImportSections.hidden = false;
       elements.clientChartImportSections.disabled = false;
       elements.clientChartImportMedicalHistory.disabled = !preview.medicalHistory.available;
@@ -2064,7 +2137,8 @@ async function previewClientChartImport(): Promise<void> {
       updateClientChartImportCreateAvailability();
       return [
         `Validated the chart export for ${preview.sourceClientName}.`,
-        "Review the new synthetic name and supported sections before creating the client."
+        `Loaded ${clientChartDestinationCatalog?.groups.length ?? 0} destination groups.`,
+        "Choose one or more destinations, then review the supported sections."
       ].join("\n");
     } catch (error) {
       clientChartImportPreview = null;
@@ -2079,6 +2153,90 @@ async function previewClientChartImport(): Promise<void> {
   });
 }
 
+async function loadClientChartWriteDestinations(
+  preview: ClientChartImportPreview
+): Promise<void> {
+  const response = await sendRuntimeMessage<ClientChartDestinationCatalog>({
+    type: "ac/popup/get-client-chart-destinations",
+    payload: { confirmedSynthetic: elements.clientChartSyntheticConfirm.checked }
+  });
+  if (!response.ok || !response.data) {
+    throw new Error(response.error ?? "Unable to load UAT client destinations.");
+  }
+  if (new URL(response.data.tenantOrigin).origin !== new URL(preview.sourceTenantOrigin).origin) {
+    throw new Error(
+      "Open the same AlayaCare UAT tenant that produced this JSON before choosing destinations."
+    );
+  }
+
+  clientChartDestinationCatalog = response.data;
+  clientChartSelectedGroupIds.clear();
+  elements.clientChartImportFacilityFilter.disabled = false;
+  elements.clientChartImportCostCentre.replaceChildren(new Option("No cost centre", ""));
+  for (const costCentre of response.data.costCentres) {
+    elements.clientChartImportCostCentre.append(new Option(costCentre.name, costCentre.code));
+  }
+  elements.clientChartImportCostCentre.disabled = false;
+  renderClientChartDestinationGroups();
+}
+
+function renderClientChartDestinationGroups(): void {
+  const catalog = clientChartDestinationCatalog;
+  elements.clientChartImportFacilities.replaceChildren();
+  if (!catalog) {
+    const message = document.createElement("p");
+    message.textContent = "Destination groups are not loaded.";
+    elements.clientChartImportFacilities.append(message);
+    updateClientChartDestinationCount();
+    return;
+  }
+
+  const query = elements.clientChartImportFacilityFilter.value.trim().toLowerCase();
+  const groups = catalog.groups.filter((group) =>
+    `${group.name} ${group.description ?? ""}`.toLowerCase().includes(query)
+  );
+  if (groups.length === 0) {
+    const message = document.createElement("p");
+    message.textContent = `No destinations match “${elements.clientChartImportFacilityFilter.value.trim()}”.`;
+    elements.clientChartImportFacilities.append(message);
+  } else {
+    for (const group of groups) {
+      const label = document.createElement("label");
+      label.className = "chart-import__facility";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = String(group.id);
+      checkbox.checked = clientChartSelectedGroupIds.has(group.id);
+      checkbox.disabled = !clientChartImportPreview;
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) clientChartSelectedGroupIds.add(group.id);
+        else clientChartSelectedGroupIds.delete(group.id);
+        updateClientChartDestinationCount();
+        updateClientChartImportCreateAvailability();
+      });
+      const name = document.createElement("span");
+      name.textContent = group.description
+        ? `${group.name} — ${group.description}`
+        : group.name;
+      label.append(checkbox, name);
+      elements.clientChartImportFacilities.append(label);
+    }
+  }
+  updateClientChartDestinationCount();
+}
+
+function updateClientChartDestinationCount(): void {
+  const count = clientChartSelectedGroupIds.size;
+  elements.clientChartImportDestinationCount.textContent = `${count} selected`;
+  elements.clientChartImportDestinationCount.dataset.tone = count > 0 ? "success" : "neutral";
+}
+
+function selectedClientChartDestinationGroups(): ClientChartDestinationGroup[] {
+  return (clientChartDestinationCatalog?.groups ?? []).filter((group) =>
+    clientChartSelectedGroupIds.has(group.id)
+  );
+}
+
 function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview): string {
   const supported = [
     `Medical history: ${preview.medicalHistory.available ? `${preview.medicalHistory.recordCount} populated values` : "not available"}`,
@@ -2088,6 +2246,7 @@ function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview)
     `Source: ${preview.sourceClientName} (Client ${preview.sourceClientId})`,
     `Tenant: ${preview.sourceTenantOrigin}`,
     `Birthday: ${preview.birthday ?? "not copied"}`,
+    `Available destinations: ${clientChartDestinationCatalog?.groups.length ?? 0} groups/facilities; ${clientChartDestinationCatalog?.costCentres.length ?? 0} cost centres`,
     "",
     "Supported in this version:",
     ...supported.map((value) => `- ${value}`),
@@ -2110,6 +2269,8 @@ function updateClientChartImportCreateAvailability(): void {
     elements.clientChartImportRiskAssessment.checked;
   elements.createClientChartImportButton.disabled = !(
     clientChartImportPreview &&
+    clientChartDestinationCatalog &&
+    clientChartSelectedGroupIds.size > 0 &&
     elements.clientChartSyntheticConfirm.checked &&
     elements.clientChartImportConfirm.checked &&
     firstName &&
@@ -2133,6 +2294,13 @@ async function createClientChartImport(): Promise<void> {
     if (!isSyntheticClientName(firstName, lastName)) {
       throw new Error("The new client name must include Test, Synthetic, UAT, Clone, or Copy.");
     }
+    const destinationGroups = selectedClientChartDestinationGroups();
+    if (destinationGroups.length === 0) {
+      throw new Error("Choose at least one destination facility or client group.");
+    }
+    const selectedCostCentre = clientChartDestinationCatalog?.costCentres.find(
+      (costCentre) => costCentre.code === elements.clientChartImportCostCentre.value
+    );
 
     const selectedSections = [
       elements.clientChartImportMedicalHistory.checked ? "medical history" : "",
@@ -2143,6 +2311,8 @@ async function createClientChartImport(): Promise<void> {
         `Create a new synthetic client named ${firstName} ${lastName}?`,
         "",
         `Destination: ${preview.sourceTenantOrigin}`,
+        `Groups/facilities (${destinationGroups.length}): ${destinationGroups.map((group) => group.name).join(", ")}`,
+        `Cost centre: ${selectedCostCentre?.name ?? "none"}`,
         `Copy: ${selectedSections.join(" and ")}`,
         "",
         "This creates a new record and cannot be undone by AC Tools."
@@ -2166,6 +2336,8 @@ async function createClientChartImport(): Promise<void> {
           targetFirstName: firstName,
           targetLastName: lastName,
           birthday: preview.birthday,
+          destinationGroupIds: destinationGroups.map((group) => group.id),
+          costCentreCode: selectedCostCentre?.code,
           medicalHistoryData: elements.clientChartImportMedicalHistory.checked
             ? preview.medicalHistory.data
             : undefined,
@@ -2220,6 +2392,13 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
     disabled || !confirmed || (elements.clientChartImportFile.files?.length ?? 0) === 0;
   elements.clientChartImportFirstName.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportLastName.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportFacilityFilter.disabled = disabled || !clientChartDestinationCatalog;
+  for (const checkbox of elements.clientChartImportFacilities.querySelectorAll<HTMLInputElement>(
+    'input[type="checkbox"]'
+  )) {
+    checkbox.disabled = disabled || !clientChartDestinationCatalog;
+  }
+  elements.clientChartImportCostCentre.disabled = disabled || !clientChartDestinationCatalog;
   elements.clientChartImportSections.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportConfirm.disabled = disabled || !clientChartImportPreview;
   elements.createClientChartImportButton.disabled = disabled;
@@ -2234,6 +2413,8 @@ function buildClientChartImportResultSummary(result: ClientChartImportResult): s
     `Created: ${result.targetClient.fullName}`,
     `Client ID: ${result.targetClient.id}`,
     `Route ID: ${result.targetClient.routeId}`,
+    `Groups/facilities: ${result.targetClient.destinationGroups.map((group) => group.name).join(", ")}`,
+    `Cost centre: ${result.targetClient.costCentre?.name ?? "none"}`,
     `Steps: ${result.counts.successful}/${result.counts.requested} successful`,
     "",
     ...steps,

@@ -8,6 +8,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "package": "node scripts/package.mjs",
+    "test:shift-lab": "node scripts/test-shift-lab.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
