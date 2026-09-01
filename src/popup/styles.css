@@ -32,6 +32,7 @@
   --ac-space-4: 4px;
   --ac-space-6: 6px;
   --ac-space-8: 8px;
+  --ac-space-10: 10px;
   --ac-space-12: 12px;
   --ac-space-16: 16px;
   --ac-space-20: 20px;
@@ -650,6 +651,15 @@ html[data-surface="sidepanel"] body {
   line-height: var(--ac-line-height-200);
   font-weight: var(--ac-font-weight-semibold);
   color: var(--ac-color-neutral-foreground-1);
+}
+
+.field__optional {
+  margin-left: var(--ac-space-4);
+  color: var(--ac-color-neutral-foreground-3);
+  font-size: var(--ac-font-size-100);
+  font-weight: var(--ac-font-weight-regular);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .field__row {
@@ -1363,7 +1373,10 @@ input[type="file"].input::file-selector-button {
 }
 
 .chart-import__sections legend {
-  padding: 0 var(--ac-space-4);
+  float: left;
+  width: 100%;
+  grid-column: 1 / -1;
+  padding: 0;
   color: var(--ac-color-neutral-foreground-2);
   font-size: var(--ac-font-size-200);
   font-weight: var(--ac-font-weight-semibold);
@@ -1381,6 +1394,16 @@ input[type="file"].input::file-selector-button {
   border: 1px solid var(--ac-color-neutral-stroke-subtle);
   border-radius: var(--ac-radius-medium);
   background-color: var(--ac-color-neutral-background-2);
+}
+
+.chart-import__target-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.chart-import__sections-hint {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .chart-import__facility-list {
@@ -1440,9 +1463,15 @@ input[type="file"].input::file-selector-button {
 
 .utility-section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--ac-space-8);
+}
+
+.utility-section-heading > div {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .utility-section-heading h4,
@@ -1460,6 +1489,34 @@ input[type="file"].input::file-selector-button {
   color: var(--ac-color-neutral-foreground-3);
   font-size: var(--ac-font-size-200);
   line-height: var(--ac-line-height-300);
+}
+
+.status-badge {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 1px var(--ac-space-8);
+  border-radius: var(--ac-radius-circular);
+  background-color: var(--ac-color-neutral-background-3);
+  color: var(--ac-color-neutral-foreground-3);
+  font-size: var(--ac-font-size-100);
+  line-height: var(--ac-line-height-200);
+  font-weight: var(--ac-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.status-badge[data-tone="success"] {
+  background-color: var(--ac-color-status-success-background);
+  color: var(--ac-color-status-success-foreground);
+}
+
+.status-badge[data-tone="warning"] {
+  background-color: var(--ac-color-status-warning-background);
+  color: var(--ac-color-status-warning-foreground);
+}
+
+.status-badge[data-tone="danger"] {
+  background-color: var(--ac-color-status-danger-background);
+  color: var(--ac-color-status-danger-foreground);
 }
 
 .connector-scenario-select {
@@ -1735,6 +1792,13 @@ input[type="file"].input::file-selector-button {
   border: 1px solid var(--ac-color-neutral-stroke-subtle);
   border-radius: var(--ac-radius-xlarge);
   background-color: var(--ac-color-neutral-background-2);
+}
+
+/* Before the first load the list is empty; drop the chrome so no stray pill shows. */
+.employee-list:empty {
+  padding: 0;
+  border-width: 0;
+  background-color: transparent;
 }
 
 .employee-list__item {

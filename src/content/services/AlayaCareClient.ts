@@ -23,10 +23,14 @@ import {
   ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
   isSyntheticClientName,
   sanitizeMedicalHistoryForImport,
+  sanitizeMedicationsForImport,
+  sanitizeProgressNotesForImport,
   sanitizeRiskAssessmentForImport,
   type ClientChartDestinationCatalog,
   type ClientChartDestinationCostCentre,
   type ClientChartDestinationGroup,
+  type ClientChartMedicationImport,
+  type ClientChartProgressNoteImport,
   type ClientChartImportRequest,
   type ClientChartImportResult,
   type ClientChartImportStepResult
@@ -105,6 +109,19 @@ interface ClientChartOverviewRecord extends Record<string, unknown> {
   preferred_name?: string;
   status?: string;
   external_id?: string | null;
+}
+
+interface ClientChartPagination {
+  items: Record<string, unknown>[];
+  reportedCount?: number;
+  totalPages: number;
+  totalVerified: boolean;
+}
+
+interface ClientChartHtmlTable {
+  title?: string;
+  columns: string[];
+  rows: string[][];
 }
 
 interface ClientSearchAssociate {
@@ -570,6 +587,15 @@ export class AlayaCareClient {
         `/api/v1/clinical/documents?type=risk_assessment&account_id=${clientId}`
       ],
       [
+        "statusHistory",
+        withQuery(`/api/v1/patients/clients/${clientId}/status_events`, {
+          sort_by: "effective_date",
+          sort_order: "desc",
+          count: "100",
+          page: "1"
+        })
+      ],
+      [
         "contacts",
         withQuery("/api/v1/patients/contacts/", {
           is_active: "true",
@@ -627,6 +653,16 @@ export class AlayaCareClient {
         })
       ],
       [
+        "authorizations",
+        withQuery("/api/v1/scheduler/authorizations", {
+          client_id: String(clientId),
+          count: "100",
+          page: "1",
+          sort_by: "start_date",
+          sort_order: "desc"
+        })
+      ],
+      [
         "carePlans",
         withRepeatedQuery(`/api/v1/clinical/client/${clientId}/careplans`, [
           ["count", "100"],
@@ -673,6 +709,22 @@ export class AlayaCareClient {
       [
         "visitAttachmentMetadata",
         withQuery("/api/v1/scheduler/visit_attachments", { client_id: String(clientId) })
+      ],
+      [
+        "requiredCareSkills",
+        withQuery("/api/v1/employees/employee_skills", {
+          client_specific_only: "true",
+          count: "100",
+          page: "1",
+          client_id: String(clientId)
+        })
+      ],
+      [
+        "events",
+        withQuery(`/api/v1/logs/security/clients/${clientId}/events`, {
+          count: "100",
+          page: "1"
+        })
       ]
     ];
 
@@ -702,6 +754,17 @@ export class AlayaCareClient {
     await Promise.all(
       requests.map(async ([name, source]) => {
         sections[name] = await this.fetchClientChartSection(source);
+      })
+    );
+
+    const legacyRequests: Array<[string, string]> = [
+      ["visitReports", `/patrol/customer/shiftreports/id/${route.routeId}`],
+      ["associatedEmployees", `/timekeeping/customer/staff/guid/${guid}/id/${route.routeId}`],
+      ["blockedEmployeeDetails", `/donotsend/default/list/guid/${guid}/id/${route.routeId}`]
+    ];
+    await Promise.all(
+      legacyRequests.map(async ([name, source]) => {
+        sections[name] = await this.fetchClientChartLegacyTables(source);
       })
     );
 
@@ -735,6 +798,12 @@ export class AlayaCareClient {
 
     const sectionValues = Object.values(sections);
     const successful = sectionValues.filter((section) => section.ok).length;
+    const partial = sectionValues.filter(
+      (section) => section.ok && section.complete === false
+    ).length;
+    const complete = sectionValues.filter(
+      (section) => section.ok && section.complete !== false
+    ).length;
     return {
       kind: ALAYACARE_CLIENT_CHART_EXPORT_KIND,
       schemaVersion: ALAYACARE_CLIENT_CHART_EXPORT_SCHEMA_VERSION,
@@ -757,13 +826,25 @@ export class AlayaCareClient {
       },
       scope: {
         uatOnly: true,
-        attachmentBinariesIncluded: false
+        attachmentBinariesIncluded: false,
+        pagination: "all-reported-pages",
+        knownExclusions: [
+          "Contact tracking report downloads",
+          "Scheduling calendar and visit instances",
+          "Vitals history (the AlayaCare screen uses a date-scoped legacy request)",
+          "Vitals alert configuration",
+          "Assessments launched through external integrations",
+          "Accounting",
+          "Attachment binaries"
+        ]
       },
       sections,
       counts: {
         sections: sectionValues.length,
         successful,
-        failed: sectionValues.length - successful
+        failed: sectionValues.length - successful,
+        complete,
+        partial
       }
     };
   }
@@ -789,8 +870,23 @@ export class AlayaCareClient {
     if (!isSyntheticClientName(firstName, lastName)) {
       throw new Error("The target name must include Test, Synthetic, UAT, Clone, or Copy.");
     }
-    if (request.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(request.birthday)) {
-      throw new Error("The source birthday must use YYYY-MM-DD format.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(request.birthday)) {
+      throw new Error("Enter the new client's required date of birth in YYYY-MM-DD format.");
+    }
+    if (!(["M", "F", "O"] as const).includes(request.gender)) {
+      throw new Error("Choose Male, Female, or Other for the required gender field.");
+    }
+    const healthCard = request.healthCard.trim();
+    if (!healthCard || healthCard.length > 100) {
+      throw new Error("Enter the required health card number (1–100 characters).");
+    }
+    const email = readNonEmptyString(request.email);
+    if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      throw new Error("Enter a valid email address of at most 254 characters.");
+    }
+    const phoneMain = readNonEmptyString(request.phoneMain);
+    if (phoneMain && phoneMain.length > 50) {
+      throw new Error("The main phone number must be at most 50 characters.");
     }
 
     const destinationGroupIds = Array.isArray(request.destinationGroupIds)
@@ -803,7 +899,7 @@ export class AlayaCareClient {
         ]
       : [];
     if (destinationGroupIds.length === 0) {
-      throw new Error("Choose at least one destination facility or client group.");
+      throw new Error("Choose at least one care location or client group.");
     }
     if (destinationGroupIds.length > 25) {
       throw new Error("A synthetic client can be assigned to at most 25 groups in one import.");
@@ -823,26 +919,26 @@ export class AlayaCareClient {
       throw new Error("The selected cost centre is no longer available in UAT.");
     }
 
-    const createSource = "/api/v1/patients/main_clients";
+    const createSource = "/api/v1/patients/";
     const createResponse = await fetch(createSource, {
       method: "POST",
       credentials: "include",
       headers: {
         Accept: "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "true",
+        "X-Requested-With": "XMLHttpRequest"
       },
       body: JSON.stringify({
-        profile: {
-          attributes: {
-            first_name: firstName,
-            last_name: lastName,
-            ...(request.birthday ? { birthday: request.birthday } : {}),
-            groups: destinationGroupIds,
-            ...(selectedCostCentre ? { cost_centre: selectedCostCentre.code } : {})
-          },
-          settings: {}
-        },
-        address: {}
+        first_name: firstName,
+        last_name: lastName,
+        birthday: request.birthday,
+        health_card: healthCard,
+        gender: request.gender,
+        groups: destinationGroupIds,
+        ...(email ? { email } : {}),
+        ...(phoneMain ? { phone_main: phoneMain } : {}),
+        ...(selectedCostCentre ? { cost_centre: Number(selectedCostCentre.code) } : {})
       })
     });
     const createBody = await parseResponseBody(createResponse);
@@ -878,14 +974,26 @@ export class AlayaCareClient {
       );
     }
     steps.push(...(await Promise.all(sectionRequests)));
+    const progressNotes = sanitizeProgressNotesForImport(request.progressNotesData);
+    const medications = sanitizeMedicationsForImport(request.medicationsData);
+    if (progressNotes.length > 0) {
+      steps.push(...(await this.importProgressNotes(targetClientId, progressNotes)));
+    }
+    if (medications.length > 0) {
+      steps.push(...(await this.importMedications(targetClientId, medications)));
+    }
 
     const routeId = targetClientId.toString(36);
     const copiedSections = steps.flatMap((step) => {
       if (step.ok && step.section === "medicalHistory") return ["medicalHistory" as const];
       if (step.ok && step.section === "riskAssessment") return ["riskAssessment" as const];
+      if (step.ok && step.section === "progressNotes") return ["progressNotes" as const];
+      if (step.ok && step.section === "medications") return ["medications" as const];
       return [];
     });
+    const uniqueCopiedSections = [...new Set(copiedSections)];
     const successful = steps.filter((step) => step.ok).length;
+    const skipped = steps.filter((step) => step.skipped).length;
     return {
       schemaVersion: ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
       importedAt: new Date().toISOString(),
@@ -898,6 +1006,9 @@ export class AlayaCareClient {
         id: targetClientId,
         routeId,
         fullName: `${firstName} ${lastName}`,
+        birthday: request.birthday,
+        ...(email ? { email } : {}),
+        ...(phoneMain ? { phoneMain } : {}),
         url: `${window.location.origin}/#/clients/${routeId}/overview`,
         destinationGroups: selectedGroups as ClientChartDestinationGroup[],
         ...(selectedCostCentre ? { costCentre: selectedCostCentre } : {})
@@ -906,19 +1017,19 @@ export class AlayaCareClient {
       counts: {
         requested: steps.length,
         successful,
+        skipped,
         failed: steps.length - successful
       },
       scope: {
         syntheticUatOnly: true,
-        copiedSections,
+        copiedSections: uniqueCopiedSections,
         omittedSections: [
           "contacts",
-          "notes",
+          "client notes and care-provider notes",
           "services",
           "care plans",
           "forms",
           "tasks",
-          "medications",
           "documents",
           "attachments"
         ]
@@ -961,7 +1072,8 @@ export class AlayaCareClient {
     const costCentres = dedupeBy(
       readCollectionRecords(costCentreResponse).flatMap<ClientChartDestinationCostCentre>(
         (record) => {
-          const code = readNonEmptyString(record.code);
+          const id = readPositiveInteger(record.id);
+          const code = readNonEmptyString(record.code) ?? (id ? String(id) : undefined);
           const name = readNonEmptyString(record.name) ?? readNonEmptyString(record.description);
           const status = readNonEmptyString(record.status)?.toLowerCase();
           if (!code || !name || status === "disabled") return [];
@@ -1383,7 +1495,7 @@ export class AlayaCareClient {
           data
         };
       }
-      return { source, ok: true, status: response.status, data };
+      return await this.loadRemainingClientChartPages(source, response.status, data, timeoutMs);
     } catch (error) {
       return {
         source,
@@ -1396,6 +1508,142 @@ export class AlayaCareClient {
       };
     } finally {
       if (timeout !== undefined) window.clearTimeout(timeout);
+    }
+  }
+
+  private async loadRemainingClientChartPages(
+    source: string,
+    status: number,
+    firstPageData: unknown,
+    timeoutMs?: number
+  ): Promise<ClientChartSection> {
+    const pagination = readClientChartPagination(firstPageData, source);
+    if (!pagination) {
+      const loadedCount = readCollectionRecords(firstPageData).length;
+      return {
+        source,
+        ok: true,
+        status,
+        data: firstPageData,
+        ...(loadedCount > 0 ? { loadedCount } : {})
+      };
+    }
+
+    const warnings: string[] = [];
+    const combinedItems = [...pagination.items];
+    let pagesLoaded = 1;
+    let complete = pagination.totalVerified;
+    if (!pagination.totalVerified) {
+      warnings.push(
+        "The API returned a full first page without a reported record or page total; later pages cannot be verified."
+      );
+    }
+    const maximumPages = Math.min(pagination.totalPages, 100);
+    if (pagination.totalPages > maximumPages) {
+      complete = false;
+      warnings.push(
+        `The API reported ${pagination.totalPages} pages; the safety limit is ${maximumPages} pages.`
+      );
+    }
+
+    for (let page = 2; page <= maximumPages; page += 1) {
+      const pageSource = setQueryPage(source, page);
+      const controller = timeoutMs ? new AbortController() : undefined;
+      const timeout = controller
+        ? window.setTimeout(() => controller.abort(), timeoutMs)
+        : undefined;
+      try {
+        const response = await fetch(pageSource, {
+          credentials: "include",
+          headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
+          signal: controller?.signal
+        });
+        const pageData = await parseResponseBody(response);
+        if (!response.ok) {
+          complete = false;
+          warnings.push(`Page ${page} failed with status ${response.status}.`);
+          break;
+        }
+        const pageItems = readItems(pageData);
+        combinedItems.push(...pageItems);
+        pagesLoaded += 1;
+        if (pageItems.length === 0 && page < pagination.totalPages) {
+          complete = false;
+          warnings.push(`Page ${page} was empty before the reported final page.`);
+          break;
+        }
+      } catch (error) {
+        complete = false;
+        warnings.push(
+          controller?.signal.aborted
+            ? `Page ${page} timed out after ${timeoutMs} ms.`
+            : `Page ${page} failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+        break;
+      } finally {
+        if (timeout !== undefined) window.clearTimeout(timeout);
+      }
+    }
+
+    if (
+      pagination.reportedCount !== undefined &&
+      combinedItems.length < pagination.reportedCount
+    ) {
+      complete = false;
+      warnings.push(
+        `Loaded ${combinedItems.length} of ${pagination.reportedCount} reported records.`
+      );
+    }
+
+    return {
+      source,
+      ok: true,
+      status,
+      data: mergeClientChartPageItems(firstPageData, combinedItems),
+      loadedCount: combinedItems.length,
+      reportedCount: pagination.reportedCount,
+      pagesLoaded,
+      totalPages: pagination.totalPages,
+      complete,
+      ...(warnings.length > 0 ? { warnings } : {})
+    };
+  }
+
+  private async fetchClientChartLegacyTables(source: string): Promise<ClientChartSection> {
+    try {
+      const response = await fetch(source, {
+        credentials: "include",
+        headers: { Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" }
+      });
+      const body = await response.text();
+      if (!response.ok) {
+        return {
+          source,
+          ok: false,
+          status: response.status,
+          error: `Request failed (${response.status}).`
+        };
+      }
+      const tables = readHtmlTables(body);
+      const loadedCount = tables.reduce((total, table) => total + table.rows.length, 0);
+      return {
+        source,
+        ok: true,
+        status: response.status,
+        data: { format: "html-tables", tables },
+        loadedCount,
+        pagesLoaded: 1,
+        complete: false,
+        warnings: [
+          "Captured the initial server-rendered table. This legacy screen does not report a verifiable total-page count."
+        ]
+      };
+    } catch (error) {
+      return {
+        source,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
@@ -1415,12 +1663,33 @@ export class AlayaCareClient {
         const collection = await this.fetchJson<unknown>(lookupSource);
         targetDocument = readItems(collection)[0];
         if (targetDocument) break;
+        if (attempt === 0) {
+          const target = await this.fetchJson<Record<string, unknown>>(
+            `/api/v1/patients/${clientId}`
+          );
+          const guid = readPositiveInteger(target.guid);
+          if (guid) {
+            await fetch(
+              `/clinical/default/details/doc/${type}/guid/${guid}/id/${clientId.toString(36)}`,
+              {
+                credentials: "include",
+                headers: {
+                  Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                  "X-CSRF-Token": "true"
+                }
+              }
+            );
+          }
+        }
         await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
       }
       const documentId = readNonEmptyString(targetDocument?.id);
       const schemaId = readNonEmptyString(targetDocument?.schema_id);
       if (!documentId || !schemaId) {
         throw new Error(`AlayaCare did not initialize the target ${type} document.`);
+      }
+      if (stableJson(targetDocument?.data) === stableJson(data)) {
+        return { section, source: lookupSource, ok: true, skipped: true };
       }
 
       const source = `/api/v1/clinical/documents/${encodeURIComponent(documentId)}`;
@@ -1429,7 +1698,9 @@ export class AlayaCareClient {
         credentials: "include",
         headers: {
           Accept: "application/json",
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "true",
+          "X-Requested-With": "XMLHttpRequest"
         },
         body: JSON.stringify({
           account_id: clientId,
@@ -1451,6 +1722,114 @@ export class AlayaCareClient {
         error: error instanceof Error ? error.message : String(error)
       };
     }
+  }
+
+  private async importProgressNotes(
+    clientId: number,
+    notes: ClientChartProgressNoteImport[]
+  ): Promise<ClientChartImportStepResult[]> {
+    const collectionSource = withQuery(`/api/v3/clinical/clients/${clientId}/progress_notes`, {
+      count: "1000",
+      page: "1"
+    });
+    let existingKeys = new Set<string>();
+    try {
+      const existing = await this.fetchJson<unknown>(collectionSource);
+      existingKeys = new Set(
+        readItems(existing).map((note) =>
+          stableJson({
+            type: readNonEmptyString(note.type),
+            body: readNonEmptyString(note.body),
+            content_type: readNonEmptyString(note.content_type) ?? "text/html"
+          })
+        )
+      );
+    } catch {
+      // The per-record POST results below remain authoritative if the preflight list is unavailable.
+    }
+
+    const source = `/api/v3/clinical/clients/${clientId}/progress_notes`;
+    const results: ClientChartImportStepResult[] = [];
+    for (const note of notes) {
+      const key = stableJson(note);
+      if (existingKeys.has(key)) {
+        results.push({ section: "progressNotes", source, ok: true, skipped: true });
+        continue;
+      }
+      try {
+        const response = await fetch(source, {
+          method: "POST",
+          credentials: "include",
+          headers: authenticatedJsonWriteHeaders(),
+          body: JSON.stringify({ ...note, status: "PUBLISHED" })
+        });
+        const body = await parseResponseBody(response);
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+        }
+        existingKeys.add(key);
+        results.push({ section: "progressNotes", source, ok: true, status: response.status });
+      } catch (error) {
+        results.push({
+          section: "progressNotes",
+          source,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    return results;
+  }
+
+  private async importMedications(
+    clientId: number,
+    medications: ClientChartMedicationImport[]
+  ): Promise<ClientChartImportStepResult[]> {
+    const collectionSource = withQuery(`/api/v3/clinical/clients/${clientId}/medications`, {
+      count: "1000",
+      page: "1"
+    });
+    let existingKeys = new Set<string>();
+    try {
+      const existing = await this.fetchJson<unknown>(collectionSource);
+      existingKeys = new Set(
+        sanitizeMedicationsForImport(readItems(existing)).map((medication) => stableJson(medication))
+      );
+    } catch {
+      // The per-record POST results below remain authoritative if the preflight list is unavailable.
+    }
+
+    const source = `/api/v3/clinical/clients/${clientId}/medications`;
+    const results: ClientChartImportStepResult[] = [];
+    for (const medication of medications) {
+      const key = stableJson(medication);
+      if (existingKeys.has(key)) {
+        results.push({ section: "medications", source, ok: true, skipped: true });
+        continue;
+      }
+      try {
+        const response = await fetch(source, {
+          method: "POST",
+          credentials: "include",
+          headers: authenticatedJsonWriteHeaders(),
+          body: JSON.stringify(medication)
+        });
+        const body = await parseResponseBody(response);
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+        }
+        existingKeys.add(key);
+        results.push({ section: "medications", source, ok: true, status: response.status });
+      } catch (error) {
+        results.push({
+          section: "medications",
+          source,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    return results;
   }
 
   private async fetchConnectorJson<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -1632,6 +2011,28 @@ function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function authenticatedJsonWriteHeaders(): Record<string, string> {
+  return {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "X-CSRF-Token": "true",
+    "X-Requested-With": "XMLHttpRequest"
+  };
+}
+
+function stableJson(value: unknown): string {
+  const normalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(normalize);
+    if (!item || typeof item !== "object") return item;
+    return Object.fromEntries(
+      Object.entries(item as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, normalize(child)])
+    );
+  };
+  return JSON.stringify(normalize(value));
+}
+
 function readItems(value: unknown): Record<string, unknown>[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const items = (value as { items?: unknown }).items;
@@ -1641,6 +2042,107 @@ function readItems(value: unknown): Record<string, unknown>[] {
           Boolean(item) && typeof item === "object" && !Array.isArray(item)
       )
     : [];
+}
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function readClientChartPagination(
+  value: unknown,
+  source: string
+): ClientChartPagination | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.items)) return null;
+
+  const items = readItems(value);
+  const sourceUrl = new URL(source, window.location.origin);
+  const requestedPageSize = readPositiveInteger(sourceUrl.searchParams.get("count"));
+  const pageSize =
+    readPositiveInteger(record.items_per_page) ??
+    readPositiveInteger(record.page_size) ??
+    requestedPageSize ??
+    items.length;
+  const reportedCount =
+    readNonNegativeInteger(record.total_count) ?? readNonNegativeInteger(record.count);
+  const reportedTotalPages = readPositiveInteger(record.total_pages);
+  const derivedTotalPages =
+    reportedCount !== undefined && pageSize > 0
+      ? Math.max(1, Math.ceil(reportedCount / pageSize))
+      : undefined;
+  const totalPages = reportedTotalPages ?? derivedTotalPages ?? 1;
+  const totalVerified =
+    reportedTotalPages !== undefined ||
+    reportedCount !== undefined ||
+    pageSize === 0 ||
+    items.length < pageSize;
+
+  return { items, reportedCount, totalPages, totalVerified };
+}
+
+function setQueryPage(source: string, page: number): string {
+  const url = new URL(source, window.location.origin);
+  url.searchParams.set("page", String(page));
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function mergeClientChartPageItems(
+  firstPageData: unknown,
+  items: Record<string, unknown>[]
+): unknown {
+  if (!firstPageData || typeof firstPageData !== "object" || Array.isArray(firstPageData)) {
+    return firstPageData;
+  }
+  return { ...(firstPageData as Record<string, unknown>), items };
+}
+
+function readHtmlTables(html: string): ClientChartHtmlTable[] {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(document.querySelectorAll("table")).flatMap((table) => {
+    const headerCells = Array.from(table.querySelectorAll("thead th"));
+    const fallbackHeaderCells = Array.from(table.querySelectorAll("tr:first-child th"));
+    const columns = (headerCells.length > 0 ? headerCells : fallbackHeaderCells).map((cell) =>
+      normalizeTableText(cell.textContent)
+    );
+    const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+    const fallbackRows = Array.from(table.querySelectorAll("tr")).filter(
+      (row) => row.querySelectorAll("td").length > 0
+    );
+    const rows = (bodyRows.length > 0 ? bodyRows : fallbackRows)
+      .map((row) =>
+        Array.from(row.querySelectorAll(":scope > th, :scope > td")).map((cell) =>
+          normalizeTableText(cell.textContent)
+        )
+      )
+      .filter((row) => row.some(Boolean));
+    if (columns.length === 0 && rows.length === 0) return [];
+
+    const heading = findPrecedingTableHeading(table);
+    return [
+      {
+        ...(heading ? { title: heading } : {}),
+        columns,
+        rows
+      }
+    ];
+  });
+}
+
+function findPrecedingTableHeading(table: HTMLTableElement): string | undefined {
+  let sibling: Element | null = table.previousElementSibling;
+  for (let checked = 0; sibling && checked < 4; checked += 1) {
+    if (/^H[1-6]$/.test(sibling.tagName) || sibling.tagName === "LEGEND") {
+      return normalizeTableText(sibling.textContent) || undefined;
+    }
+    sibling = sibling.previousElementSibling;
+  }
+  return undefined;
+}
+
+function normalizeTableText(value: string | null): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function readCollectionRecords(value: unknown): Record<string, unknown>[] {
@@ -1673,17 +2175,20 @@ const SCORABLE_CLIENT_CHART_SECTIONS = [
   "demographics",
   "medicalHistory",
   "riskAssessment",
+  "statusHistory",
   "contacts",
   "clientNotes",
   "careProviderNotes",
   "progressNotes",
   "services",
+  "authorizations",
   "carePlans",
   "clientForms",
   "documentApprovals",
   "medications",
   "attachmentMetadata",
   "visitAttachmentMetadata",
+  "requiredCareSkills",
   "openTasks"
 ] as const;
 
@@ -1737,6 +2242,13 @@ function buildClientChartScoreRequests(
     ["medicalHistory", `/api/v1/clinical/documents?type=medical_history&account_id=${clientId}`],
     ["riskAssessment", `/api/v1/clinical/documents?type=risk_assessment&account_id=${clientId}`],
     [
+      "statusHistory",
+      withQuery(`/api/v1/patients/clients/${clientId}/status_events`, {
+        count: "1",
+        page: "1"
+      })
+    ],
+    [
       "contacts",
       withQuery("/api/v1/patients/contacts/", {
         is_active: "true",
@@ -1779,6 +2291,14 @@ function buildClientChartScoreRequests(
       })
     ],
     [
+      "authorizations",
+      withQuery("/api/v1/scheduler/authorizations", {
+        client_id: String(clientId),
+        count: "1",
+        page: "1"
+      })
+    ],
+    [
       "carePlans",
       withQuery(`/api/v1/clinical/client/${clientId}/careplans`, {
         count: "1",
@@ -1814,6 +2334,15 @@ function buildClientChartScoreRequests(
     [
       "visitAttachmentMetadata",
       withQuery("/api/v1/scheduler/visit_attachments", { client_id: String(clientId) })
+    ],
+    [
+      "requiredCareSkills",
+      withQuery("/api/v1/employees/employee_skills", {
+        client_specific_only: "true",
+        count: "1",
+        page: "1",
+        client_id: String(clientId)
+      })
     ],
     [
       "openTasks",

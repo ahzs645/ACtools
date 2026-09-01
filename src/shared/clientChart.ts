@@ -19,6 +19,12 @@ export interface ClientChartSection {
   status?: number;
   data?: unknown;
   error?: string;
+  loadedCount?: number;
+  reportedCount?: number;
+  pagesLoaded?: number;
+  totalPages?: number;
+  complete?: boolean;
+  warnings?: string[];
 }
 
 export interface ClientChartExportSnapshot {
@@ -31,12 +37,16 @@ export interface ClientChartExportSnapshot {
   scope: {
     uatOnly: true;
     attachmentBinariesIncluded: false;
+    pagination?: "all-reported-pages";
+    knownExclusions?: string[];
   };
   sections: Record<string, ClientChartSection>;
   counts: {
     sections: number;
     successful: number;
     failed: number;
+    complete?: number;
+    partial?: number;
   };
 }
 

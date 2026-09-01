@@ -238,8 +238,15 @@ async function init(): Promise<void> {
   for (const element of [
     elements.clientChartImportFirstName,
     elements.clientChartImportLastName,
+    elements.clientChartImportBirthday,
+    elements.clientChartImportHealthCard,
+    elements.clientChartImportGender,
+    elements.clientChartImportEmail,
+    elements.clientChartImportPhoneMain,
     elements.clientChartImportMedicalHistory,
     elements.clientChartImportRiskAssessment,
+    elements.clientChartImportProgressNotes,
+    elements.clientChartImportMedications,
     elements.clientChartImportCostCentre,
     elements.clientChartImportConfirm
   ]) {
@@ -1172,6 +1179,11 @@ interface PopupElements {
   clientChartImportTarget: HTMLElement;
   clientChartImportFirstName: HTMLInputElement;
   clientChartImportLastName: HTMLInputElement;
+  clientChartImportBirthday: HTMLInputElement;
+  clientChartImportHealthCard: HTMLInputElement;
+  clientChartImportGender: HTMLSelectElement;
+  clientChartImportEmail: HTMLInputElement;
+  clientChartImportPhoneMain: HTMLInputElement;
   clientChartImportDestination: HTMLElement;
   clientChartImportDestinationCount: HTMLElement;
   clientChartImportFacilityFilter: HTMLInputElement;
@@ -1180,6 +1192,8 @@ interface PopupElements {
   clientChartImportSections: HTMLFieldSetElement;
   clientChartImportMedicalHistory: HTMLInputElement;
   clientChartImportRiskAssessment: HTMLInputElement;
+  clientChartImportProgressNotes: HTMLInputElement;
+  clientChartImportMedications: HTMLInputElement;
   clientChartImportConfirmContainer: HTMLElement;
   clientChartImportConfirm: HTMLInputElement;
   openImportedClientLink: HTMLAnchorElement;
@@ -1297,6 +1311,21 @@ function getPopupElements(): PopupElements {
   const clientChartImportLastName = document.querySelector<HTMLInputElement>(
     "#client-chart-import-last-name"
   );
+  const clientChartImportBirthday = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-birthday"
+  );
+  const clientChartImportHealthCard = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-health-card"
+  );
+  const clientChartImportGender = document.querySelector<HTMLSelectElement>(
+    "#client-chart-import-gender"
+  );
+  const clientChartImportEmail = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-email"
+  );
+  const clientChartImportPhoneMain = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-phone-main"
+  );
   const clientChartImportDestination = document.querySelector<HTMLElement>(
     ".chart-import__destination"
   );
@@ -1320,6 +1349,12 @@ function getPopupElements(): PopupElements {
   );
   const clientChartImportRiskAssessment = document.querySelector<HTMLInputElement>(
     "#client-chart-import-risk-assessment"
+  );
+  const clientChartImportProgressNotes = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-progress-notes"
+  );
+  const clientChartImportMedications = document.querySelector<HTMLInputElement>(
+    "#client-chart-import-medications"
   );
   const clientChartImportConfirmContainer = document.querySelector<HTMLElement>(
     ".chart-import__confirm"
@@ -1433,6 +1468,11 @@ function getPopupElements(): PopupElements {
     !clientChartImportTarget ||
     !clientChartImportFirstName ||
     !clientChartImportLastName ||
+    !clientChartImportBirthday ||
+    !clientChartImportHealthCard ||
+    !clientChartImportGender ||
+    !clientChartImportEmail ||
+    !clientChartImportPhoneMain ||
     !clientChartImportDestination ||
     !clientChartImportDestinationCount ||
     !clientChartImportFacilityFilter ||
@@ -1441,6 +1481,8 @@ function getPopupElements(): PopupElements {
     !clientChartImportSections ||
     !clientChartImportMedicalHistory ||
     !clientChartImportRiskAssessment ||
+    !clientChartImportProgressNotes ||
+    !clientChartImportMedications ||
     !clientChartImportConfirmContainer ||
     !clientChartImportConfirm ||
     !openImportedClientLink ||
@@ -1527,6 +1569,11 @@ function getPopupElements(): PopupElements {
     clientChartImportTarget,
     clientChartImportFirstName,
     clientChartImportLastName,
+    clientChartImportBirthday,
+    clientChartImportHealthCard,
+    clientChartImportGender,
+    clientChartImportEmail,
+    clientChartImportPhoneMain,
     clientChartImportDestination,
     clientChartImportDestinationCount,
     clientChartImportFacilityFilter,
@@ -1535,6 +1582,8 @@ function getPopupElements(): PopupElements {
     clientChartImportSections,
     clientChartImportMedicalHistory,
     clientChartImportRiskAssessment,
+    clientChartImportProgressNotes,
+    clientChartImportMedications,
     clientChartImportConfirmContainer,
     clientChartImportConfirm,
     openImportedClientLink,
@@ -2001,9 +2050,12 @@ async function inspectActiveClientChart(clientId?: number): Promise<void> {
       clientChartSnapshot = response.data;
       elements.downloadClientChartButton.disabled = false;
       elements.clientChartSummary.textContent = buildClientChartSummary(response.data);
+      const partialCount = response.data.counts.partial ?? 0;
+      const completeCount =
+        response.data.counts.complete ?? response.data.counts.successful - partialCount;
       return [
         `Inspected ${response.data.client.fullName}.`,
-        `${response.data.counts.successful} of ${response.data.counts.sections} sections loaded.`,
+        `${completeCount} of ${response.data.counts.sections} sections are complete; ${partialCount} are partial.`,
         "Review the summary, then download the local JSON snapshot."
       ].join("\n");
     } catch (error) {
@@ -2027,14 +2079,28 @@ function buildClientChartSummary(snapshot: ClientChartExportSnapshot): string {
   const failedSections = Object.entries(snapshot.sections)
     .filter(([, section]) => !section.ok)
     .map(([name, section]) => `- ${name}: ${section.error ?? "request failed"}`);
+  const partialSections = Object.entries(snapshot.sections)
+    .filter(([, section]) => section.ok && section.complete === false)
+    .map(([name, section]) => `- ${name}: ${(section.warnings ?? ["partial capture"]).join(" ")}`);
+  const partialCount = snapshot.counts.partial ?? partialSections.length;
+  const completeCount = snapshot.counts.complete ?? snapshot.counts.successful - partialCount;
+  const knownExclusions = snapshot.scope.knownExclusions ?? [];
   return [
     snapshot.client.fullName,
     `Route ID: ${snapshot.client.routeId}`,
     `Client ID: ${snapshot.client.id}`,
     `GUID: ${snapshot.client.guid}`,
-    `Sections: ${snapshot.counts.successful}/${snapshot.counts.sections} successful`,
+    `Sections: ${completeCount}/${snapshot.counts.sections} complete; ${partialCount} partial; ${snapshot.counts.failed} failed`,
     `Attachment binaries: not included`,
-    failedSections.length > 0 ? `\nSection failures:\n${failedSections.join("\n")}` : "\nNo section failures."
+    partialSections.length > 0
+      ? `\nPartial sections:\n${partialSections.join("\n")}`
+      : "\nNo partial sections.",
+    failedSections.length > 0
+      ? `\nSection failures:\n${failedSections.join("\n")}`
+      : "\nNo section failures.",
+    knownExclusions.length > 0
+      ? `\nKnown exclusions:\n${knownExclusions.map((item) => `- ${item}`).join("\n")}`
+      : ""
   ].join("\n");
 }
 
@@ -2067,6 +2133,16 @@ function resetClientChartImportPreviewUi(): void {
   elements.clientChartImportFirstName.disabled = true;
   elements.clientChartImportLastName.value = "";
   elements.clientChartImportLastName.disabled = true;
+  elements.clientChartImportBirthday.value = "";
+  elements.clientChartImportBirthday.disabled = true;
+  elements.clientChartImportHealthCard.value = "";
+  elements.clientChartImportHealthCard.disabled = true;
+  elements.clientChartImportGender.value = "O";
+  elements.clientChartImportGender.disabled = true;
+  elements.clientChartImportEmail.value = "";
+  elements.clientChartImportEmail.disabled = true;
+  elements.clientChartImportPhoneMain.value = "";
+  elements.clientChartImportPhoneMain.disabled = true;
   elements.clientChartImportDestination.hidden = true;
   elements.clientChartImportDestinationCount.textContent = "Loading";
   elements.clientChartImportDestinationCount.dataset.tone = "neutral";
@@ -2075,7 +2151,7 @@ function resetClientChartImportPreviewUi(): void {
   elements.clientChartImportFacilities.replaceChildren();
   const destinationPlaceholder = document.createElement("p");
   destinationPlaceholder.textContent =
-    "Destination groups load after the JSON preview is validated.";
+    "Care locations and client groups load after the JSON preview is validated.";
   elements.clientChartImportFacilities.append(destinationPlaceholder);
   elements.clientChartImportCostCentre.replaceChildren(new Option("No cost centre", ""));
   elements.clientChartImportCostCentre.disabled = true;
@@ -2085,6 +2161,10 @@ function resetClientChartImportPreviewUi(): void {
   elements.clientChartImportMedicalHistory.disabled = true;
   elements.clientChartImportRiskAssessment.checked = false;
   elements.clientChartImportRiskAssessment.disabled = true;
+  elements.clientChartImportProgressNotes.checked = false;
+  elements.clientChartImportProgressNotes.disabled = true;
+  elements.clientChartImportMedications.checked = false;
+  elements.clientChartImportMedications.disabled = true;
   elements.clientChartImportConfirmContainer.hidden = true;
   elements.clientChartImportConfirm.checked = false;
   elements.clientChartImportConfirm.disabled = true;
@@ -2116,12 +2196,22 @@ async function previewClientChartImport(): Promise<void> {
       elements.clientChartImportFirstName.value = preview.suggestedFirstName;
       elements.clientChartImportLastName.disabled = false;
       elements.clientChartImportLastName.value = preview.suggestedLastName;
+      elements.clientChartImportBirthday.disabled = false;
+      elements.clientChartImportBirthday.value = preview.birthday ?? "";
+      elements.clientChartImportHealthCard.disabled = false;
+      elements.clientChartImportHealthCard.value = "";
+      elements.clientChartImportGender.disabled = false;
+      elements.clientChartImportGender.value = preview.suggestedGender;
+      elements.clientChartImportEmail.disabled = false;
+      elements.clientChartImportEmail.value = "";
+      elements.clientChartImportPhoneMain.disabled = false;
+      elements.clientChartImportPhoneMain.value = "";
       elements.clientChartImportDestination.hidden = false;
       elements.clientChartImportDestinationCount.textContent = "Loading";
       elements.clientChartImportDestinationCount.dataset.tone = "neutral";
       elements.clientChartImportFacilities.replaceChildren();
       const loadingDestinations = document.createElement("p");
-      loadingDestinations.textContent = "Loading facilities and client groups from UAT…";
+      loadingDestinations.textContent = "Loading care locations and client groups from UAT…";
       elements.clientChartImportFacilities.append(loadingDestinations);
       await loadClientChartWriteDestinations(preview);
       elements.clientChartImportSections.hidden = false;
@@ -2130,6 +2220,10 @@ async function previewClientChartImport(): Promise<void> {
       elements.clientChartImportMedicalHistory.checked = preview.medicalHistory.available;
       elements.clientChartImportRiskAssessment.disabled = !preview.riskAssessment.available;
       elements.clientChartImportRiskAssessment.checked = preview.riskAssessment.available;
+      elements.clientChartImportProgressNotes.disabled = !preview.progressNotes.available;
+      elements.clientChartImportProgressNotes.checked = preview.progressNotes.available;
+      elements.clientChartImportMedications.disabled = !preview.medications.available;
+      elements.clientChartImportMedications.checked = preview.medications.available;
       elements.clientChartImportConfirmContainer.hidden = false;
       elements.clientChartImportConfirm.disabled = false;
       elements.clientChartImportConfirm.checked = false;
@@ -2137,8 +2231,8 @@ async function previewClientChartImport(): Promise<void> {
       updateClientChartImportCreateAvailability();
       return [
         `Validated the chart export for ${preview.sourceClientName}.`,
-        `Loaded ${clientChartDestinationCatalog?.groups.length ?? 0} destination groups.`,
-        "Choose one or more destinations, then review the supported sections."
+        `Loaded ${clientChartDestinationCatalog?.groups.length ?? 0} care locations/client groups.`,
+        "Review the suggested basic information and care locations, then choose clinical sections to replay."
       ].join("\n");
     } catch (error) {
       clientChartImportPreview = null;
@@ -2171,6 +2265,15 @@ async function loadClientChartWriteDestinations(
 
   clientChartDestinationCatalog = response.data;
   clientChartSelectedGroupIds.clear();
+  const sourceGroups = new Set(preview.sourceGroupNames.map((name) => name.toLowerCase()));
+  for (const group of response.data.groups) {
+    if (
+      sourceGroups.has(group.name.toLowerCase()) ||
+      (group.description && sourceGroups.has(group.description.toLowerCase()))
+    ) {
+      clientChartSelectedGroupIds.add(group.id);
+    }
+  }
   elements.clientChartImportFacilityFilter.disabled = false;
   elements.clientChartImportCostCentre.replaceChildren(new Option("No cost centre", ""));
   for (const costCentre of response.data.costCentres) {
@@ -2185,7 +2288,7 @@ function renderClientChartDestinationGroups(): void {
   elements.clientChartImportFacilities.replaceChildren();
   if (!catalog) {
     const message = document.createElement("p");
-    message.textContent = "Destination groups are not loaded.";
+    message.textContent = "Care locations and client groups are not loaded.";
     elements.clientChartImportFacilities.append(message);
     updateClientChartDestinationCount();
     return;
@@ -2197,7 +2300,7 @@ function renderClientChartDestinationGroups(): void {
   );
   if (groups.length === 0) {
     const message = document.createElement("p");
-    message.textContent = `No destinations match “${elements.clientChartImportFacilityFilter.value.trim()}”.`;
+    message.textContent = `No care locations or client groups match “${elements.clientChartImportFacilityFilter.value.trim()}”.`;
     elements.clientChartImportFacilities.append(message);
   } else {
     for (const group of groups) {
@@ -2240,13 +2343,16 @@ function selectedClientChartDestinationGroups(): ClientChartDestinationGroup[] {
 function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview): string {
   const supported = [
     `Medical history: ${preview.medicalHistory.available ? `${preview.medicalHistory.recordCount} populated values` : "not available"}`,
-    `Risk assessment: ${preview.riskAssessment.available ? `${preview.riskAssessment.recordCount} risks` : "not available"}`
+    `Risk assessment: ${preview.riskAssessment.available ? `${preview.riskAssessment.recordCount} risks` : "not available"}`,
+    `Progress notes: ${preview.progressNotes.available ? `${preview.progressNotes.recordCount} notes` : "not available"}`,
+    `Medications: ${preview.medications.available ? `${preview.medications.recordCount} medications` : "not available"}`
   ];
   return [
     `Source: ${preview.sourceClientName} (Client ${preview.sourceClientId})`,
     `Tenant: ${preview.sourceTenantOrigin}`,
-    `Birthday: ${preview.birthday ?? "not copied"}`,
-    `Available destinations: ${clientChartDestinationCatalog?.groups.length ?? 0} groups/facilities; ${clientChartDestinationCatalog?.costCentres.length ?? 0} cost centres`,
+    `Suggested birthday: ${preview.birthday ?? "none"}`,
+    `Source care locations/groups: ${preview.sourceGroupNames.join(", ") || "none reported"}`,
+    `Available destinations: ${clientChartDestinationCatalog?.groups.length ?? 0} care locations/groups; ${clientChartDestinationCatalog?.costCentres.length ?? 0} cost centres`,
     "",
     "Supported in this version:",
     ...supported.map((value) => `- ${value}`),
@@ -2264,9 +2370,6 @@ function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview)
 function updateClientChartImportCreateAvailability(): void {
   const firstName = elements.clientChartImportFirstName.value.trim();
   const lastName = elements.clientChartImportLastName.value.trim();
-  const hasSelectedConditions =
-    elements.clientChartImportMedicalHistory.checked ||
-    elements.clientChartImportRiskAssessment.checked;
   elements.createClientChartImportButton.disabled = !(
     clientChartImportPreview &&
     clientChartDestinationCatalog &&
@@ -2276,7 +2379,12 @@ function updateClientChartImportCreateAvailability(): void {
     firstName &&
     lastName &&
     isSyntheticClientName(firstName, lastName) &&
-    hasSelectedConditions
+    elements.clientChartImportBirthday.checkValidity() &&
+    elements.clientChartImportHealthCard.checkValidity() &&
+    Boolean(elements.clientChartImportHealthCard.value.trim()) &&
+    elements.clientChartImportGender.checkValidity() &&
+    elements.clientChartImportEmail.checkValidity() &&
+    elements.clientChartImportPhoneMain.checkValidity()
   );
 }
 
@@ -2291,12 +2399,17 @@ async function createClientChartImport(): Promise<void> {
 
     const firstName = elements.clientChartImportFirstName.value.trim();
     const lastName = elements.clientChartImportLastName.value.trim();
+    const birthday = elements.clientChartImportBirthday.value.trim();
+    const healthCard = elements.clientChartImportHealthCard.value.trim();
+    const gender = elements.clientChartImportGender.value as "M" | "F" | "O";
+    const email = elements.clientChartImportEmail.value.trim();
+    const phoneMain = elements.clientChartImportPhoneMain.value.trim();
     if (!isSyntheticClientName(firstName, lastName)) {
       throw new Error("The new client name must include Test, Synthetic, UAT, Clone, or Copy.");
     }
     const destinationGroups = selectedClientChartDestinationGroups();
     if (destinationGroups.length === 0) {
-      throw new Error("Choose at least one destination facility or client group.");
+      throw new Error("Choose at least one care location or client group.");
     }
     const selectedCostCentre = clientChartDestinationCatalog?.costCentres.find(
       (costCentre) => costCentre.code === elements.clientChartImportCostCentre.value
@@ -2304,16 +2417,23 @@ async function createClientChartImport(): Promise<void> {
 
     const selectedSections = [
       elements.clientChartImportMedicalHistory.checked ? "medical history" : "",
-      elements.clientChartImportRiskAssessment.checked ? "risk assessment" : ""
+      elements.clientChartImportRiskAssessment.checked ? "risk assessment" : "",
+      elements.clientChartImportProgressNotes.checked ? "progress notes" : "",
+      elements.clientChartImportMedications.checked ? "medications" : ""
     ].filter(Boolean);
     const confirmed = window.confirm(
       [
         `Create a new synthetic client named ${firstName} ${lastName}?`,
         "",
         `Destination: ${preview.sourceTenantOrigin}`,
-        `Groups/facilities (${destinationGroups.length}): ${destinationGroups.map((group) => group.name).join(", ")}`,
+        `Care locations/groups (${destinationGroups.length}): ${destinationGroups.map((group) => group.name).join(", ")}`,
         `Cost centre: ${selectedCostCentre?.name ?? "none"}`,
-        `Copy: ${selectedSections.join(" and ")}`,
+        `Date of birth: ${birthday || "not set"}`,
+        `Health card: ${healthCard || "not set"}`,
+        `Gender: ${gender}`,
+        `Email: ${email || "not set"}`,
+        `Main phone: ${phoneMain || "not set"}`,
+        `Replay sections: ${selectedSections.join(" and ") || "none (basic client only)"}`,
         "",
         "This creates a new record and cannot be undone by AC Tools."
       ].join("\n")
@@ -2323,7 +2443,7 @@ async function createClientChartImport(): Promise<void> {
     setClientChartImportControlsDisabled(true);
     clientChartImportResult = null;
     elements.clientChartImportSummary.textContent =
-      "Creating the synthetic UAT client and applying selected conditions…";
+      "Creating the synthetic UAT client and replaying selected clinical sections…";
     try {
       const response = await sendRuntimeMessage<ClientChartImportResult>({
         type: "ac/popup/import-client-chart",
@@ -2335,7 +2455,11 @@ async function createClientChartImport(): Promise<void> {
           sourceClientName: preview.sourceClientName,
           targetFirstName: firstName,
           targetLastName: lastName,
-          birthday: preview.birthday,
+          birthday,
+          healthCard,
+          gender,
+          email: email || undefined,
+          phoneMain: phoneMain || undefined,
           destinationGroupIds: destinationGroups.map((group) => group.id),
           costCentreCode: selectedCostCentre?.code,
           medicalHistoryData: elements.clientChartImportMedicalHistory.checked
@@ -2343,6 +2467,12 @@ async function createClientChartImport(): Promise<void> {
             : undefined,
           riskAssessmentData: elements.clientChartImportRiskAssessment.checked
             ? preview.riskAssessment.data
+            : undefined,
+          progressNotesData: elements.clientChartImportProgressNotes.checked
+            ? preview.progressNotes.data
+            : undefined,
+          medicationsData: elements.clientChartImportMedications.checked
+            ? preview.medications.data
             : undefined
         }
       });
@@ -2362,13 +2492,13 @@ async function createClientChartImport(): Promise<void> {
         showToast(
           "warning",
           "Client created with import warnings",
-          `${response.data.counts.failed} selected condition section failed. Download the report for details.`
+          `${response.data.counts.failed} selected clinical replay step failed. Download the report for details.`
         );
       } else {
         showToast(
           "success",
           "Synthetic client created",
-          `${response.data.targetClient.fullName} was created with the selected conditions.`
+          `${response.data.targetClient.fullName} was created with the selected clinical sections.`
         );
       }
       return [
@@ -2392,6 +2522,11 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
     disabled || !confirmed || (elements.clientChartImportFile.files?.length ?? 0) === 0;
   elements.clientChartImportFirstName.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportLastName.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportBirthday.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportHealthCard.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportGender.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportEmail.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportPhoneMain.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportFacilityFilter.disabled = disabled || !clientChartDestinationCatalog;
   for (const checkbox of elements.clientChartImportFacilities.querySelectorAll<HTMLInputElement>(
     'input[type="checkbox"]'
@@ -2400,6 +2535,10 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
   }
   elements.clientChartImportCostCentre.disabled = disabled || !clientChartDestinationCatalog;
   elements.clientChartImportSections.disabled = disabled || !clientChartImportPreview;
+  elements.clientChartImportProgressNotes.disabled =
+    disabled || !clientChartImportPreview?.progressNotes.available;
+  elements.clientChartImportMedications.disabled =
+    disabled || !clientChartImportPreview?.medications.available;
   elements.clientChartImportConfirm.disabled = disabled || !clientChartImportPreview;
   elements.createClientChartImportButton.disabled = disabled;
 }
@@ -2407,19 +2546,23 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
 function buildClientChartImportResultSummary(result: ClientChartImportResult): string {
   const steps = result.steps.map(
     (step) =>
-      `- ${step.section}: ${step.ok ? `success${step.status ? ` (${step.status})` : ""}` : `failed — ${step.error ?? "unknown error"}`}`
+      `- ${step.section}: ${step.skipped ? "already present (skipped)" : step.ok ? `success${step.status ? ` (${step.status})` : ""}` : `failed — ${step.error ?? "unknown error"}`}`
   );
   return [
     `Created: ${result.targetClient.fullName}`,
     `Client ID: ${result.targetClient.id}`,
     `Route ID: ${result.targetClient.routeId}`,
-    `Groups/facilities: ${result.targetClient.destinationGroups.map((group) => group.name).join(", ")}`,
+    `Date of birth: ${result.targetClient.birthday ?? "not set"}`,
+    `Email: ${result.targetClient.email ?? "not set"}`,
+    `Main phone: ${result.targetClient.phoneMain ?? "not set"}`,
+    `Care locations/groups: ${result.targetClient.destinationGroups.map((group) => group.name).join(", ")}`,
     `Cost centre: ${result.targetClient.costCentre?.name ?? "none"}`,
     `Steps: ${result.counts.successful}/${result.counts.requested} successful`,
+    `Already present: ${result.counts.skipped}`,
     "",
     ...steps,
     "",
-    "Not imported: medications, contacts, notes, services, care plans, forms, tasks, documents, or attachments."
+    `Not imported: ${result.scope.omittedSections.join(", ")}.`
   ].join("\n");
 }
 

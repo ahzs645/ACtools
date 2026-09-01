@@ -1193,9 +1193,9 @@
                 <div>
                   <h3 id="client-chart-import-heading" class="utility-card__title">Create client from JSON</h3>
                   <p class="utility-card__context">
-                    Preview an AC Tools chart export, choose supported condition sections, and create
-                    a new test client in the same UAT tenant. Source identifiers and contact details
-                    are never copied.
+                    Preview an AC Tools chart export, edit the new client's basic information and
+                    API-backed care location, then create a test client in the same UAT tenant.
+                    Source identifiers and contact details are never copied automatically.
                   </p>
                 </div>
               </div>
@@ -1241,18 +1241,45 @@
                   <span class="field__label">New last name</span>
                   <input id="client-chart-import-last-name" class="input" type="text" maxlength="100" disabled />
                 </label>
+                <label class="field" for="client-chart-import-birthday">
+                  <span class="field__label">Date of birth</span>
+                  <input id="client-chart-import-birthday" class="input" type="date" required disabled />
+                </label>
+                <label class="field" for="client-chart-import-health-card">
+                  <span class="field__label">Health card number</span>
+                  <input id="client-chart-import-health-card" class="input" type="text" maxlength="100" autocomplete="off" required disabled />
+                </label>
+                <label class="field" for="client-chart-import-gender">
+                  <span class="field__label">Gender</span>
+                  <select id="client-chart-import-gender" class="input" required disabled>
+                    <option value="O">Other</option>
+                    <option value="F">Female</option>
+                    <option value="M">Male</option>
+                  </select>
+                </label>
+                <label class="field" for="client-chart-import-email">
+                  <span class="field__label">Email <span class="field__optional">Optional</span></span>
+                  <input id="client-chart-import-email" class="input" type="email" maxlength="254" autocomplete="off" disabled />
+                </label>
+                <label class="field" for="client-chart-import-phone-main">
+                  <span class="field__label">Main phone <span class="field__optional">Optional</span></span>
+                  <input id="client-chart-import-phone-main" class="input" type="tel" maxlength="50" autocomplete="off" disabled />
+                </label>
+                <p class="field__hint chart-import__target-hint">
+                  Name, date of birth, and gender are suggested. Enter a new synthetic health card number; source identifiers are never copied.
+                </p>
               </div>
 
               <section class="chart-import__destination" aria-labelledby="client-chart-import-destination-heading" hidden>
                 <div class="utility-section-heading">
                   <div>
-                    <h4 id="client-chart-import-destination-heading">Write destination</h4>
-                    <p>Assign this single synthetic client to one or more live UAT groups or facilities.</p>
+                    <h4 id="client-chart-import-destination-heading">Care location</h4>
+                    <p>Choose one or more live UAT care locations or client groups returned by the AlayaCare API.</p>
                   </div>
                   <span id="client-chart-import-destination-count" class="status-badge" data-tone="neutral">Loading</span>
                 </div>
                 <label class="field" for="client-chart-import-facility-filter">
-                  <span class="field__label">Find a facility or client group</span>
+                  <span class="field__label">Find a care location or client group</span>
                   <input
                     id="client-chart-import-facility-filter"
                     class="input"
@@ -1266,12 +1293,12 @@
                   id="client-chart-import-facilities"
                   class="chart-import__facility-list"
                   role="group"
-                  aria-label="Destination facilities and client groups"
+                  aria-label="Care locations and client groups"
                   aria-live="polite"
                 >
                   <p>Destination groups load after the JSON preview is validated.</p>
                 </div>
-                <p class="field__hint">Select at least one. Multiple selections assign the same client to multiple groups; they do not create duplicate charts.</p>
+                <p class="field__hint">Select at least one. Matching source groups are selected automatically when available; you can change them before creation.</p>
                 <label class="field" for="client-chart-import-cost-centre">
                   <span class="field__label">Cost centre <span class="field__optional">Optional</span></span>
                   <select id="client-chart-import-cost-centre" class="input" disabled>
@@ -1281,7 +1308,7 @@
               </section>
 
               <fieldset class="chart-import__sections" disabled hidden>
-                <legend>Copy supported conditions</legend>
+                <legend>Replay supported clinical sections (optional)</legend>
                 <label class="check-field check-field--plain">
                   <input id="client-chart-import-medical-history" type="checkbox" />
                   <span>Medical history</span>
@@ -1290,6 +1317,15 @@
                   <input id="client-chart-import-risk-assessment" type="checkbox" />
                   <span>Risk assessment</span>
                 </label>
+                <label class="check-field check-field--plain">
+                  <input id="client-chart-import-progress-notes" type="checkbox" />
+                  <span>Progress notes</span>
+                </label>
+                <label class="check-field check-field--plain">
+                  <input id="client-chart-import-medications" type="checkbox" />
+                  <span>Medications</span>
+                </label>
+                <p class="field__hint chart-import__sections-hint">Leave all unchecked to create only the editable basic client record.</p>
               </fieldset>
 
               <label class="check-field chart-import__confirm" hidden>
