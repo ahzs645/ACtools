@@ -1,0 +1,385 @@
+<section
+  id="view-launcher"
+  class="view launcher is-active"
+  aria-labelledby="app-title"
+>
+  <div class="search" role="search">
+    <span class="search__icon" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+    </span>
+    <input
+      id="tool-search"
+      type="search"
+      placeholder="Find an AC tool"
+      aria-label="Find an AC tool"
+      autocomplete="off"
+    />
+  </div>
+
+  <div>
+    <span class="section-label">Apps</span>
+    <div class="app-grid" role="list" aria-label="AC Tools apps">
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-action="open-day-view"
+        data-tool-id="day-view"
+        data-tool-title="Day View"
+        data-tool-subtitle="Side-by-side schedule comparison overlay."
+        data-search-terms="day view schedule overlay compare employees"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18" />
+            <path d="M8 3v4M16 3v4" />
+            <rect x="7" y="13" width="4" height="4" rx="0.75" fill="currentColor" stroke="none" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Day View</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="environment-manager"
+        data-tool-id="environment-manager"
+        data-tool-title="Environments"
+        data-tool-subtitle="Manage tenants, credentials, defaults, and API health."
+        data-search-terms="environment tenant credentials api keys health import export default"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Environments</span>
+        <span class="app-tile__badge">New</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="about"
+        data-tool-id="about"
+        data-tool-title="About AC Tools"
+        data-tool-subtitle="Version details and recent changes."
+        data-search-terms="about version changelog release notes"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" />
+          </svg>
+        </span>
+        <span class="app-tile__label">About</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="availability"
+        data-tool-id="availability"
+        data-tool-title="Availability Test"
+        data-tool-subtitle="Post a single-day availability through the active session."
+        data-search-terms="availability test post form schedule"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="6" y="4" width="12" height="17" rx="2" />
+            <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+            <path d="m9 13 2 2 4-4" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Availability</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="shift-lab"
+        data-tool-id="shift-lab"
+        data-tool-title="Shift Lab"
+        data-tool-subtitle="Build and validate unassigned UAT shift scenarios and rulesets."
+        data-search-terms="shift create ruleset service location heritage heights occurrence unassigned test json"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+            <path d="M8 15h8M12 12v6" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Shift Lab</span>
+        <span class="app-tile__badge">New</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="form-context-catalog"
+        data-tool-id="form-context-catalog"
+        data-tool-title="Field Catalog"
+        data-tool-subtitle="Export a reviewed snapshot of form-context bindings and options."
+        data-search-terms="field catalog form context bindings export json csv excel xlsx demographics options"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
+            <path d="M4 5.5v16" />
+            <path d="M8 7h8M8 11h8M8 15h5" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Field Catalog</span>
+        <span class="app-tile__badge">XLSX</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="employee-manager"
+        data-tool-id="employee-manager"
+        data-tool-title="Employee Manager"
+        data-tool-subtitle="Find, review, and update employees through the signed-in tenant."
+        data-search-terms="employee manager staff status notes alayaduck"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="9" cy="8" r="3" />
+            <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+            <path d="M16 8h5M18.5 5.5v5" />
+            <path d="M16 15h5M16 18h5" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Employees</span>
+        <span class="app-tile__badge">New</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="connector-utilities"
+        data-tool-id="connector-utilities"
+        data-tool-title="Connector Utilities"
+        data-tool-subtitle="Browse, edit, back up, and export Connector resources."
+        data-search-terms="connector scenario blueprint json editor validate import export bundle backup draft published templates connections webhooks functions catalog"
+        data-status="ready"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M8 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h2" />
+            <path d="M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2" />
+            <path d="m10 9-3 3 3 3M14 9l3 3-3 3" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Connector Utilities</span>
+        <span class="app-tile__badge">New</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="planned"
+        data-tool-id="shift-swap"
+        data-tool-title="Shift Swap"
+        data-tool-subtitle="Guided employee shift moves and validations."
+        data-search-terms="shift swap exchange employees move"
+        data-status="planned"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 8h14" />
+            <path d="m15 5 3 3-3 3" />
+            <path d="M20 16H6" />
+            <path d="m9 13-3 3 3 3" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Shift Swap</span>
+        <span class="app-tile__badge">Soon</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="planned"
+        data-tool-id="save-restore"
+        data-tool-title="Save / Restore"
+        data-tool-subtitle="Snapshot and recovery tooling for bulk edits."
+        data-search-terms="save restore snapshot undo recover backup"
+        data-status="planned"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <path d="M3 4v5h5" />
+            <path d="M12 8v4l2.5 1.5" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Save / Restore</span>
+        <span class="app-tile__badge">Soon</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="client-chart-export"
+        data-tool-id="client-chart-export"
+        data-tool-title="Client Chart Export"
+        data-tool-subtitle="Chart snapshots, JSON client creation, and batch PDF parsing."
+        data-search-terms="client patient chart data export json synthetic uat inspect find search pdf batch parse import create"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+            <path d="M9 14h6" />
+            <path d="M9 17h4" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Client Chart Export</span>
+      </button>
+
+      <button
+        type="button"
+        class="app-tile"
+        role="listitem"
+        data-tool-panel="planned"
+        data-tool-id="rotation-builder"
+        data-tool-title="Rotation Builder"
+        data-tool-subtitle="Rotation and union-rule-aware scheduling tools."
+        data-search-terms="rotation builder pcn union schedule"
+        data-status="planned"
+      >
+        <span class="app-tile__icon" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18" />
+            <path d="M8 3v4M16 3v4" />
+            <path d="M9 16a3 3 0 1 0 3-3" />
+            <path d="M12 11v2h2" />
+          </svg>
+        </span>
+        <span class="app-tile__label">Rotation Builder</span>
+        <span class="app-tile__badge">Soon</span>
+      </button>
+    </div>
+    <div id="empty-search" class="empty-search">No tools match your search.</div>
+  </div>
+
+  <div class="status-card">
+    <div class="status-card__body">
+      <span class="status-card__label">Page Status</span>
+      <p id="status-text" class="status-card__text">Checking current tab&hellip;</p>
+    </div>
+    <button
+      id="refresh-status"
+      type="button"
+      class="icon-button"
+      aria-label="Refresh page status"
+      title="Refresh page status"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 12a9 9 0 1 1-3-6.7" />
+        <path d="M21 4v5h-5" />
+      </svg>
+    </button>
+  </div>
+</section>

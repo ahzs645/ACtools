@@ -1,0 +1,262 @@
+<div id="panel-connector-utilities" class="tool-panel">
+  <section class="utility-card utility-view utility-menu" data-connector-view="menu" aria-labelledby="connector-menu-heading">
+    <h3 id="connector-menu-heading" class="sr-only">Connector Utilities workspaces</h3>
+
+    <div class="utility-option-grid">
+      <button type="button" class="utility-option" data-connector-nav="scenarios">
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+            <circle cx="18" cy="18" r="2" />
+          </svg>
+        </span>
+        <span>
+          <strong>Scenario Library</strong>
+          <small>Browse, load, back up, or download team scenarios.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+      <button type="button" class="utility-option" data-connector-nav="editor">
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H6a2 2 0 0 0-2 2v4a3 3 0 0 1-2 3 3 3 0 0 1 2 3v4a2 2 0 0 0 2 2h2" />
+            <path d="M16 3h2a2 2 0 0 1 2 2v4a3 3 0 0 0 2 3 3 3 0 0 0-2 3v4a2 2 0 0 1-2 2h-2" />
+          </svg>
+        </span>
+        <span>
+          <strong>JSON Editor</strong>
+          <small>Edit, validate, import, export, and save blueprints.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+      <button type="button" class="utility-option" data-connector-nav="references">
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 5.5A2.5 2.5 0 0 1 6 3h5v17H6a2.5 2.5 0 0 0-2.5 2.5z" />
+            <path d="M20.5 5.5A2.5 2.5 0 0 0 18 3h-5v17h5a2.5 2.5 0 0 1 2.5 2.5z" />
+          </svg>
+        </span>
+        <span>
+          <strong>Asset Inventory</strong>
+          <small>Export templates, connections, hooks, functions, keys, and data assets.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+      <button type="button" class="utility-option" data-connector-nav="health">
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /><path d="M2 19h21" />
+          </svg>
+        </span>
+        <span><strong>Operations &amp; Health</strong><small>Review schedules, next runs, incomplete executions, and run history.</small></span>
+        <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg></span>
+      </button>
+      <button type="button" class="utility-option" data-connector-nav="diagnostics">
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3 2.8 19h18.4L12 3Z" /><path d="M12 9v4M12 17h.01" />
+          </svg>
+        </span>
+        <span><strong>Diagnostics &amp; Audit</strong><small>Audit a blueprint, compare draft with published, and triage common errors.</small></span>
+        <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg></span>
+      </button>
+    </div>
+
+    <div class="utility-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      <span>Uses your active Connector session. Credentials stay in the browser.</span>
+    </div>
+  </section>
+
+  <section class="utility-card utility-view" data-connector-view="scenarios" aria-labelledby="connector-scenarios-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="connector-scenarios-heading" class="utility-card__title">Scenario Library</h3>
+        <p id="connector-scenario-count" class="utility-card__context">Query the active Connector team.</p>
+      </div>
+    </div>
+
+    <div class="connector-browser">
+      <div class="utility-section-heading">
+        <div>
+          <h4>Team scenarios</h4>
+          <p>Select a scenario to load its draft or published blueprint.</p>
+        </div>
+        <button id="connector-refresh-scenarios" type="button" class="button button--subtle">Refresh</button>
+      </div>
+      <input
+        id="connector-scenario-search"
+        class="input"
+        type="search"
+        placeholder="Filter scenarios"
+        aria-label="Filter Connector scenarios"
+      />
+      <select id="connector-scenario-select" class="connector-scenario-select" size="6" aria-label="Team scenarios"></select>
+      <div class="utility-actions utility-actions--two">
+        <button id="connector-load-active" type="button" class="button button--secondary" title="Load the scenario open on the active Connector tab">Load active</button>
+        <button id="connector-download-all" type="button" class="button button--secondary" title="Download published and draft JSON for every team scenario">Download all</button>
+      </div>
+    </div>
+
+    <div class="utility-actions utility-actions--two">
+      <button id="connector-load-draft" type="button" class="button button--primary" title="Load the selected scenario's draft blueprint">
+        Load draft
+      </button>
+      <button id="connector-load-published" type="button" class="button button--secondary" title="Load the selected scenario's published blueprint">
+        Load published
+      </button>
+    </div>
+    <p class="utility-card__summary">
+      The all-scenarios ZIP includes published, draft, and combined JSON plus a failure manifest.
+    </p>
+  </section>
+
+  <section class="utility-card utility-view" data-connector-view="editor" aria-labelledby="connector-json-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="connector-json-heading" class="utility-card__title">JSON Editor</h3>
+        <p id="connector-context" class="utility-card__context">
+          Load a scenario from the Scenario Library or import a blueprint.
+        </p>
+      </div>
+    </div>
+
+    <p id="connector-summary" class="utility-card__summary">
+      Loads through your active Connector session; no credentials are stored.
+    </p>
+
+    <button type="button" class="button button--secondary" data-connector-nav="scenarios" title="Open the Scenario Library">
+      Browse scenarios
+    </button>
+
+    <label class="field" for="connector-json-editor">
+      <span class="field__label">Blueprint JSON</span>
+      <textarea
+        id="connector-json-editor"
+        class="connector-json-editor"
+        spellcheck="false"
+        autocomplete="off"
+        aria-describedby="connector-validation connector-share-warning"
+        placeholder="Load a draft or published scenario blueprint."
+      ></textarea>
+    </label>
+
+    <div class="utility-actions utility-actions--three">
+      <button id="connector-format-json" type="button" class="button button--secondary">Format</button>
+      <button id="connector-validate-json" type="button" class="button button--secondary">Validate</button>
+      <button id="connector-revert-json" type="button" class="button button--secondary" disabled>Revert</button>
+    </div>
+
+    <pre id="connector-validation" class="connector-validation" data-status="neutral">Load a scenario to validate its JSON.</pre>
+
+    <div class="utility-actions utility-actions--three">
+      <button id="connector-copy-json" type="button" class="button button--secondary" title="Copy the editor JSON to the clipboard">Copy</button>
+      <button id="connector-import-json" type="button" class="button button--secondary" title="Import a blueprint JSON file">Import</button>
+      <button id="connector-export-json" type="button" class="button button--secondary" title="Export the editor JSON to a file">Export</button>
+      <input id="connector-import-file" type="file" accept="application/json,.json" hidden />
+    </div>
+
+    <button id="connector-export-bundle" type="button" class="button button--secondary" title="Export the published and draft blueprints together">
+      Export bundle
+    </button>
+
+    <p id="connector-share-warning" class="connector-warning">
+      Scenario JSON can contain connection identifiers and configured static values. Review exports before sharing them.
+    </p>
+
+    <label class="check-field">
+      <input id="connector-save-confirmation" type="checkbox" />
+      <span>I understand that saving updates the current server-side scenario draft.</span>
+    </label>
+    <button id="connector-save-json" type="button" class="button button--primary" disabled title="Save the editor JSON as the server-side scenario draft">
+      Save draft
+    </button>
+  </section>
+
+  <section class="utility-card utility-view" data-connector-view="references" aria-labelledby="connector-references-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="connector-references-heading" class="utility-card__title">Asset Inventory</h3>
+        <p id="connector-reference-summary" class="utility-card__context">
+          Sanitized metadata from the active Connector team.
+        </p>
+      </div>
+    </div>
+
+    <div class="connector-reference-grid">
+      <button type="button" class="connector-reference-item" data-connector-reference="templates">
+        <span>Templates</span><strong id="connector-reference-templates">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="connections">
+        <span>Connections</span><strong id="connector-reference-connections">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="webhooks">
+        <span>Webhooks</span><strong id="connector-reference-webhooks">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="functions">
+        <span>Functions</span><strong id="connector-reference-functions">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="keys">
+        <span>Keys</span><strong id="connector-reference-keys">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="dataStores">
+        <span>Data Stores</span><strong id="connector-reference-data-stores">—</strong>
+      </button>
+      <button type="button" class="connector-reference-item" data-connector-reference="dataStructures">
+        <span>Data Structures</span><strong id="connector-reference-data-structures">—</strong>
+      </button>
+    </div>
+    <div class="utility-actions utility-actions--two">
+      <button id="connector-refresh-references" type="button" class="button button--secondary" title="Refresh the Connector asset catalogs">Refresh</button>
+      <button id="connector-export-references" type="button" class="button button--primary" disabled title="Export every sanitized asset catalog">
+        Export all
+      </button>
+    </div>
+    <p class="utility-card__summary">
+      Select an asset group to export it. Secret values, data-store records, webhook URLs, account details, and creator identities are excluded.
+    </p>
+  </section>
+
+  <section class="utility-card utility-view" data-connector-view="health" aria-labelledby="connector-health-heading" hidden>
+    <div class="utility-card__header"><div>
+      <h3 id="connector-health-heading" class="utility-card__title">Operations &amp; Health</h3>
+      <p class="utility-card__context">Read-only schedule and execution metadata.</p>
+    </div></div>
+    <label class="field" for="connector-health-scenario"><span class="field__label">Scenario</span>
+      <select id="connector-health-scenario" class="input"></select>
+    </label>
+    <button id="connector-load-health" type="button" class="button button--primary" title="Load schedule and execution metadata for the selected scenario">Load health</button>
+    <div id="connector-health-summary" class="connector-metric-grid" aria-live="polite"><p class="utility-card__summary">Choose a scenario to inspect it.</p></div>
+    <div id="connector-health-runs" class="connector-list"></div>
+    <a id="connector-open-history" class="button button--secondary connector-link-button" href="#" target="_blank" rel="noreferrer" hidden title="Open the Connector execution history in a new tab">Open history</a>
+  </section>
+
+  <section class="utility-card utility-view" data-connector-view="diagnostics" aria-labelledby="connector-audit-heading" hidden>
+    <div class="utility-card__header"><div>
+      <h3 id="connector-audit-heading" class="utility-card__title">Diagnostics &amp; Audit</h3>
+      <p class="utility-card__context">Static analysis only; this never runs or changes a scenario.</p>
+    </div></div>
+    <label class="field" for="connector-audit-scenario"><span class="field__label">Scenario</span>
+      <select id="connector-audit-scenario" class="input"></select>
+    </label>
+    <button id="connector-run-audit" type="button" class="button button--primary" title="Audit the draft blueprint and compare it with the published one">Run audit</button>
+    <div id="connector-audit-result" class="connector-audit-results" aria-live="polite"><p class="utility-card__summary">Choose a scenario to audit its blueprint.</p></div>
+    <div class="utility-section-heading"><div><h4>Error reference</h4><p>Common Connector symptoms and practical next steps.</p></div></div>
+    <div id="connector-diagnostics-list" class="connector-list"></div>
+  </section>
+</div>

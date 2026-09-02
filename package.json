@@ -1,11 +1,12 @@
 {
   "name": "ac-tools",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "Chrome extension toolkit for AlayaCare scheduling and rotation workflows.",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "check:html": "node scripts/check-element-ids.mjs",
     "dev": "node scripts/build.mjs --watch",
     "package": "node scripts/package.mjs",
     "test:shift-lab": "node scripts/test-shift-lab.mjs",

@@ -2,10 +2,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
+import { htmlInclude } from "./scripts/html-include.mjs";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   base: "./",
+  plugins: [htmlInclude({ root: __dirname, entries: ["sidepanel.html"] })],
   build: {
     outDir: "dist",
     emptyOutDir: true,

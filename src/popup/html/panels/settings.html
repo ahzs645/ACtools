@@ -1,0 +1,100 @@
+<div id="panel-settings" class="tool-panel">
+  <div class="settings-section">
+    <span class="section-label">Open in</span>
+    <div class="radio-group" role="radiogroup" aria-label="Surface mode">
+      <label class="radio">
+        <input type="radio" name="surface" value="sidepanel" />
+        <span class="radio__indicator" aria-hidden="true"></span>
+        <span class="radio__label">
+          <span class="radio__title">Side panel</span>
+          <span class="radio__description">Docked to the side of the browser. Recommended.</span>
+        </span>
+      </label>
+      <label class="radio">
+        <input type="radio" name="surface" value="popup" />
+        <span class="radio__indicator" aria-hidden="true"></span>
+        <span class="radio__label">
+          <span class="radio__title">Popup</span>
+          <span class="radio__description">Floating window above the page when you click the toolbar icon.</span>
+        </span>
+      </label>
+    </div>
+    <p id="surface-hint" class="settings-hint" hidden></p>
+  </div>
+
+  <div class="settings-section">
+    <span class="section-label">Theme</span>
+    <div class="radio-group" role="radiogroup" aria-label="Theme">
+      <label class="radio">
+        <input type="radio" name="theme" value="system" />
+        <span class="radio__indicator" aria-hidden="true"></span>
+        <span class="radio__label">
+          <span class="radio__title">System</span>
+          <span class="radio__description">Match the operating system setting.</span>
+        </span>
+      </label>
+      <label class="radio">
+        <input type="radio" name="theme" value="light" />
+        <span class="radio__indicator" aria-hidden="true"></span>
+        <span class="radio__label">
+          <span class="radio__title">Light</span>
+        </span>
+      </label>
+      <label class="radio">
+        <input type="radio" name="theme" value="dark" />
+        <span class="radio__indicator" aria-hidden="true"></span>
+        <span class="radio__label">
+          <span class="radio__title">Dark</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <span class="section-label">Optional tools</span>
+    <p class="settings-hint settings-hint--muted">
+      Turn Client Chart Export workspaces on or off. A tool that is off is hidden in the
+      menu and its requests are refused, so nothing reaches the tenant.
+    </p>
+    <div class="settings-form">
+      <label class="check-field">
+        <input type="checkbox" data-feature-flag="clientChartSnapshot" />
+        <span>
+          <strong>Structured client snapshot</strong>
+          <small>
+            Searches, ranks, and reads live client charts on the signed-in AlayaCare UAT
+            tenant. Off by default.
+          </small>
+        </span>
+      </label>
+      <label class="check-field">
+        <input type="checkbox" data-feature-flag="clientChartImport" />
+        <span>
+          <strong>Create client from JSON</strong>
+          <small>Creates a new synthetic client on the active UAT tenant from a chart export.</small>
+        </span>
+      </label>
+      <label class="check-field">
+        <input type="checkbox" data-feature-flag="clientChartPdfParser" />
+        <span>
+          <strong>Batch PDF parser</strong>
+          <small>Parses AlayaCare batch PDFs inside the extension. Makes no tenant requests.</small>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <span class="section-label">Employee defaults</span>
+    <div class="settings-form">
+      <label class="field__label" for="default-timezone">Default timezone</label>
+      <input id="default-timezone" class="input" type="text" placeholder="America/Vancouver" />
+      <label class="field__label" for="employee-statuses">Employee statuses, one per line</label>
+      <textarea id="employee-statuses" class="input" rows="7"></textarea>
+      <div class="environment-toolbar">
+        <button id="preferences-save" type="button" class="button button--primary" title="Save the employee defaults">Save</button>
+        <button id="preferences-reset" type="button" class="button button--subtle" title="Restore the built-in employee defaults">Reset</button>
+      </div>
+    </div>
+  </div>
+</div>

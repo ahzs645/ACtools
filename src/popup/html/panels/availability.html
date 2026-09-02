@@ -1,0 +1,66 @@
+<div id="panel-availability" class="tool-panel">
+  <form id="availability-form">
+    <div class="field">
+      <label class="field__label" for="employeeId">Employee ID</label>
+      <input
+        id="employeeId"
+        name="employeeId"
+        class="input"
+        type="number"
+        min="1"
+        required
+      />
+    </div>
+
+    <div class="field__row">
+      <div class="field">
+        <label class="field__label" for="availabilityTypeId">Type ID</label>
+        <input
+          id="availabilityTypeId"
+          name="availabilityTypeId"
+          class="input"
+          type="number"
+          min="1"
+          required
+        />
+      </div>
+      <div class="field">
+        <label class="field__label" for="date">Date</label>
+        <input id="date" name="date" class="input" type="date" required />
+      </div>
+    </div>
+
+    <div class="field__row">
+      <div class="field">
+        <label class="field__label" for="startTime">Start</label>
+        <input
+          id="startTime"
+          name="startTime"
+          class="input"
+          type="time"
+          required
+        />
+      </div>
+      <div class="field">
+        <label class="field__label" for="endTime">End</label>
+        <input id="endTime" name="endTime" class="input" type="time" required />
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="description">Description</label>
+      <input
+        id="description"
+        name="description"
+        class="input"
+        type="text"
+        maxlength="120"
+        required
+      />
+    </div>
+
+    <button id="post-availability" type="submit" class="button button--primary">
+      Post availability
+    </button>
+  </form>
+</div>

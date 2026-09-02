@@ -1,0 +1,448 @@
+<div id="panel-client-chart-export" class="tool-panel">
+  <section
+    class="utility-card utility-view utility-menu"
+    data-chart-view="menu"
+    aria-labelledby="client-chart-menu-heading"
+  >
+    <h3 id="client-chart-menu-heading" class="sr-only">Client Chart Export workspaces</h3>
+
+    <label class="check-field">
+      <input id="client-chart-synthetic-confirm" type="checkbox" />
+      <span>
+        <strong>Synthetic UAT data only</strong>
+        <small>
+          I confirm that every client and file I open here is a synthetic or test record.
+          Required before any workspace below unlocks.
+        </small>
+      </span>
+    </label>
+
+    <div class="utility-option-grid">
+      <button
+        type="button"
+        class="utility-option"
+        data-chart-nav="snapshot"
+        data-chart-feature="clientChartSnapshot"
+        disabled
+      >
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+            <circle cx="11" cy="14" r="2.5" />
+            <path d="m14 17-1.6-1.6" />
+          </svg>
+        </span>
+        <span>
+          <strong>Structured client snapshot</strong>
+          <small>Search a UAT tenant and build a reviewable JSON chart snapshot.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="utility-option"
+        data-chart-nav="import"
+        data-chart-feature="clientChartImport"
+        disabled
+      >
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M19 8v6M22 11h-6" />
+          </svg>
+        </span>
+        <span>
+          <strong>Create client from JSON</strong>
+          <small>Replay a chart export into a new synthetic client on this tenant.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="utility-option"
+        data-chart-nav="pdf"
+        data-chart-feature="clientChartPdfParser"
+        disabled
+      >
+        <span class="utility-option__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+            <path d="M8 13h8M8 17h5" />
+          </svg>
+        </span>
+        <span>
+          <strong>Batch PDF parser</strong>
+          <small>Turn AlayaCare batch-export PDFs into inspectable JSON, fully offline.</small>
+        </span>
+        <span class="utility-option__arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </button>
+    </div>
+
+    <div class="utility-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      <span>Uses your active AlayaCare session. Snapshots download locally and are never uploaded.</span>
+    </div>
+  </section>
+
+  <section
+    class="utility-card utility-view"
+    data-chart-view="snapshot"
+    aria-labelledby="client-chart-snapshot-heading"
+    hidden
+  >
+    <div class="utility-card__header">
+      <div>
+        <h3 id="client-chart-snapshot-heading" class="utility-card__title">Structured client snapshot</h3>
+        <p class="utility-card__context">
+          Reads a client through your authenticated session and builds a reviewable JSON
+          snapshot. Restricted to UAT test data.
+        </p>
+      </div>
+    </div>
+    <ul class="utility-card__list">
+      <li>Demographics, medical history, risks, contacts, notes, services, care plans, forms, tasks, medications, and document metadata</li>
+      <li>Records the source endpoint and success or failure of every section</li>
+      <li>Attachment metadata only—never attachment file contents</li>
+      <li>Downloads locally and does not upload or transmit the chart</li>
+    </ul>
+
+    <section class="chart-client-search" aria-labelledby="client-chart-search-heading">
+      <div>
+        <h4 id="client-chart-search-heading">Find a synthetic UAT client</h4>
+        <p>Search by client name or AlayaCare ID, then inspect a matching chart.</p>
+      </div>
+      <div class="field-group field-group--inline">
+        <label class="field" for="client-chart-search-input">
+          <span class="field__label">Client name or ID</span>
+          <input
+            id="client-chart-search-input"
+            class="input"
+            type="search"
+            placeholder="Name or AlayaCare ID"
+            autocomplete="off"
+            disabled
+          />
+        </label>
+        <button
+          id="search-client-charts"
+          type="button"
+          class="button button--secondary"
+          title="Search synthetic UAT clients"
+          disabled
+        >
+          Search
+        </button>
+      </div>
+      <div class="field-group field-group--inline">
+        <label class="field" for="client-chart-rank-limit">
+          <span class="field__label">Deep-scan candidates</span>
+          <select id="client-chart-rank-limit" class="input" disabled>
+            <option value="10">10 clients</option>
+            <option value="25">25 clients</option>
+          </select>
+        </label>
+        <button
+          id="rank-client-charts"
+          type="button"
+          class="button button--secondary"
+          title="Rank active clients by how complete their charts are"
+          disabled
+        >
+          Rank charts
+        </button>
+      </div>
+      <p class="field__hint">
+        Preselects metadata-rich active clients, then ranks them by populated chart sections
+        and record counts. This bounded scan may take a minute.
+      </p>
+      <div id="client-chart-search-results" class="chart-client-search__results" aria-live="polite">
+        <p>Confirm synthetic UAT data to enable client search.</p>
+      </div>
+    </section>
+
+    <div class="utility-actions utility-actions--two">
+      <button
+        id="inspect-client-chart"
+        type="button"
+        class="button button--primary"
+        title="Inspect the client open on the active AlayaCare tab"
+        disabled
+      >
+        Inspect chart
+      </button>
+      <button
+        id="download-client-chart"
+        type="button"
+        class="button button--secondary"
+        title="Download the inspected chart as JSON"
+        disabled
+      >
+        Download JSON
+      </button>
+    </div>
+
+    <div class="result">
+      <span class="section-label">Snapshot result</span>
+      <pre id="client-chart-summary" class="result__output">Search for a client, or inspect the chart open on the active tab.</pre>
+    </div>
+  </section>
+
+  <section
+    class="utility-card utility-view chart-import"
+    data-chart-view="import"
+    aria-labelledby="client-chart-import-heading"
+    hidden
+  >
+    <div class="utility-card__header">
+      <div>
+        <h3 id="client-chart-import-heading" class="utility-card__title">Create client from JSON</h3>
+        <p class="utility-card__context">
+          Preview an AC Tools chart export, edit the new client's basic information and
+          API-backed care location, then create a test client in the same UAT tenant.
+          Source identifiers and contact details are never copied automatically.
+        </p>
+      </div>
+    </div>
+
+    <label class="field" for="client-chart-import-file">
+      <span class="field__label">AC Tools client-chart JSON</span>
+      <input
+        id="client-chart-import-file"
+        class="input"
+        type="file"
+        accept="application/json,.json"
+        disabled
+      />
+    </label>
+
+    <div class="utility-actions utility-actions--two">
+      <button
+        id="preview-client-chart-import"
+        type="button"
+        class="button button--secondary"
+        title="Validate the selected JSON locally"
+        disabled
+      >
+        Preview
+      </button>
+      <button
+        id="create-client-chart-import"
+        type="button"
+        class="button button--primary"
+        title="Create a new synthetic client on the active UAT tenant"
+        disabled
+      >
+        Create client
+      </button>
+    </div>
+
+    <div class="field-group chart-import__target" hidden>
+      <label class="field" for="client-chart-import-first-name">
+        <span class="field__label">New first name</span>
+        <input id="client-chart-import-first-name" class="input" type="text" maxlength="100" disabled />
+      </label>
+      <label class="field" for="client-chart-import-last-name">
+        <span class="field__label">New last name</span>
+        <input id="client-chart-import-last-name" class="input" type="text" maxlength="100" disabled />
+      </label>
+      <label class="field" for="client-chart-import-birthday">
+        <span class="field__label">Date of birth</span>
+        <input id="client-chart-import-birthday" class="input" type="date" required disabled />
+      </label>
+      <label class="field" for="client-chart-import-health-card">
+        <span class="field__label">Health card number</span>
+        <input id="client-chart-import-health-card" class="input" type="text" maxlength="100" autocomplete="off" required disabled />
+      </label>
+      <label class="field" for="client-chart-import-gender">
+        <span class="field__label">Gender</span>
+        <select id="client-chart-import-gender" class="input" required disabled>
+          <option value="O">Other</option>
+          <option value="F">Female</option>
+          <option value="M">Male</option>
+        </select>
+      </label>
+      <label class="field" for="client-chart-import-email">
+        <span class="field__label">Email <span class="field__optional">Optional</span></span>
+        <input id="client-chart-import-email" class="input" type="email" maxlength="254" autocomplete="off" disabled />
+      </label>
+      <label class="field" for="client-chart-import-phone-main">
+        <span class="field__label">Main phone <span class="field__optional">Optional</span></span>
+        <input id="client-chart-import-phone-main" class="input" type="tel" maxlength="50" autocomplete="off" disabled />
+      </label>
+      <p class="field__hint chart-import__target-hint">
+        Name, date of birth, and gender are suggested. Enter a new synthetic health card number; source identifiers are never copied.
+      </p>
+    </div>
+
+    <section class="chart-import__destination" aria-labelledby="client-chart-import-destination-heading" hidden>
+      <div class="utility-section-heading">
+        <div>
+          <h4 id="client-chart-import-destination-heading">Care location</h4>
+          <p>Choose one or more live UAT care locations or client groups returned by the AlayaCare API.</p>
+        </div>
+        <span id="client-chart-import-destination-count" class="status-badge" data-tone="neutral">Loading</span>
+      </div>
+      <label class="field" for="client-chart-import-facility-filter">
+        <span class="field__label">Find a care location or client group</span>
+        <input
+          id="client-chart-import-facility-filter"
+          class="input"
+          type="search"
+          placeholder="For example, Rotary Manor or Community"
+          autocomplete="off"
+          disabled
+        />
+      </label>
+      <div
+        id="client-chart-import-facilities"
+        class="chart-import__facility-list"
+        role="group"
+        aria-label="Care locations and client groups"
+        aria-live="polite"
+      >
+        <p>Destination groups load after the JSON preview is validated.</p>
+      </div>
+      <p class="field__hint">Select at least one. Matching source groups are selected automatically when available; you can change them before creation.</p>
+      <label class="field" for="client-chart-import-cost-centre">
+        <span class="field__label">Cost centre <span class="field__optional">Optional</span></span>
+        <select id="client-chart-import-cost-centre" class="input" disabled>
+          <option value="">No cost centre</option>
+        </select>
+      </label>
+    </section>
+
+    <fieldset class="chart-import__sections" disabled hidden>
+      <legend>Replay supported clinical sections (optional)</legend>
+      <label class="check-field check-field--plain">
+        <input id="client-chart-import-medical-history" type="checkbox" />
+        <span>Medical history</span>
+      </label>
+      <label class="check-field check-field--plain">
+        <input id="client-chart-import-risk-assessment" type="checkbox" />
+        <span>Risk assessment</span>
+      </label>
+      <label class="check-field check-field--plain">
+        <input id="client-chart-import-progress-notes" type="checkbox" />
+        <span>Progress notes</span>
+      </label>
+      <label class="check-field check-field--plain">
+        <input id="client-chart-import-medications" type="checkbox" />
+        <span>Medications</span>
+      </label>
+      <p class="field__hint chart-import__sections-hint">Leave all unchecked to create only the editable basic client record.</p>
+    </fieldset>
+
+    <label class="check-field chart-import__confirm" hidden>
+      <input id="client-chart-import-confirm" type="checkbox" disabled />
+      <span>I understand this creates a new synthetic client in the active AlayaCare UAT tenant.</span>
+    </label>
+
+    <div class="utility-actions utility-actions--two">
+      <a
+        id="open-imported-client"
+        class="button button--secondary"
+        target="_blank"
+        rel="noreferrer"
+        title="Open the newly created client in AlayaCare"
+        hidden
+      >
+        Open client
+      </a>
+      <button
+        id="download-client-chart-import-report"
+        type="button"
+        class="button button--secondary"
+        title="Download the import report as JSON"
+        disabled
+      >
+        Download report
+      </button>
+    </div>
+
+    <div class="result">
+      <span class="section-label">Import result</span>
+      <pre id="client-chart-import-summary" class="result__output">Select an AC Tools client-chart JSON export.</pre>
+    </div>
+  </section>
+
+  <section
+    class="utility-card utility-view"
+    data-chart-view="pdf"
+    aria-labelledby="client-chart-pdf-heading"
+    hidden
+  >
+    <div class="utility-card__header">
+      <div>
+        <h3 id="client-chart-pdf-heading" class="utility-card__title">Batch PDF parser</h3>
+        <p class="utility-card__context">
+          Select one or more AlayaCare batch PDFs. Parsing happens entirely inside this
+          extension and produces inspectable page text, report groups, client identifiers,
+          batch dates, and visit-day indexes.
+        </p>
+      </div>
+    </div>
+    <ul class="utility-card__list">
+      <li>Runs offline: no tenant request is made and nothing is uploaded</li>
+      <li>Classifies each page by report type and groups visits by day</li>
+      <li>Downloads the parsed index as JSON</li>
+    </ul>
+
+    <label class="field" for="client-chart-pdf-files">
+      <span class="field__label">AlayaCare batch PDF files</span>
+      <input
+        id="client-chart-pdf-files"
+        class="input"
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        disabled
+      />
+    </label>
+
+    <div class="utility-actions utility-actions--two">
+      <button
+        id="parse-client-chart-pdfs"
+        type="button"
+        class="button button--primary"
+        title="Parse the selected PDFs locally"
+        disabled
+      >
+        Parse PDFs
+      </button>
+      <button
+        id="download-client-chart-pdf-json"
+        type="button"
+        class="button button--secondary"
+        title="Download the parsed PDF index as JSON"
+        disabled
+      >
+        Download JSON
+      </button>
+    </div>
+
+    <div class="result">
+      <span class="section-label">Parser result</span>
+      <pre id="client-chart-pdf-summary" class="result__output">Select one or more AlayaCare batch PDFs.</pre>
+    </div>
+  </section>
+</div>

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { expandHtml } from "./html-include.mjs";
 
 const tempDirectory = await mkdtemp(join(tmpdir(), "ac-tools-shift-lab-"));
 const bundlePath = join(tempDirectory, "shiftLab.mjs");
@@ -95,7 +96,7 @@ try {
     true
   );
 
-  const html = await readFile("sidepanel.html", "utf8");
+  const html = expandHtml(await readFile("sidepanel.html", "utf8"), process.cwd());
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
   assert.deepEqual(duplicateIds, []);

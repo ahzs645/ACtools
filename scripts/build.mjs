@@ -59,6 +59,10 @@ async function run() {
 
   await viteBuild(popupConfig);
   await Promise.all([esbuildBuild(backgroundOptions), esbuildBuild(contentOptions)]);
+
+  // Fails the build if the assembled HTML no longer satisfies the selectors the
+  // popup resolves at load time. Exits non-zero on its own.
+  await import("./check-element-ids.mjs");
 }
 
 run().catch((error) => {

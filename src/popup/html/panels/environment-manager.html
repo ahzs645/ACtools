@@ -1,0 +1,44 @@
+<div id="panel-environment-manager" class="tool-panel">
+  <section class="environment-section">
+    <div class="section-heading-row">
+      <div>
+        <h3>Configured environments</h3>
+        <p class="employee-summary">Names, URLs, defaults, and support links are local non-secret configuration.</p>
+      </div>
+      <div class="environment-toolbar">
+        <button id="environment-import" type="button" class="button button--secondary">Import</button>
+        <button id="environment-export" type="button" class="button button--secondary">Export</button>
+        <input id="environment-import-input" type="file" accept="application/json,.json" hidden />
+      </div>
+    </div>
+    <div id="environment-list" class="environment-list"></div>
+  </section>
+
+  <section class="environment-section environment-form">
+    <h3>Add or edit environment</h3>
+    <input id="environment-name" class="input" type="text" placeholder="Friendly name, e.g. Northern Health UAT" />
+    <input id="environment-origin" class="input" type="url" placeholder="https://tenant.uat.alayacare.ca" />
+    <input id="environment-support-url" class="input" type="url" value="https://healthbc.service-now.com/" placeholder="ServiceNow support URL" />
+    <div class="environment-toolbar">
+      <button id="environment-save" type="button" class="button button--primary" title="Save this environment">Save</button>
+      <button id="environment-reset" type="button" class="button button--subtle" title="Clear the environment form">Clear</button>
+    </div>
+  </section>
+
+  <section class="environment-section environment-form">
+    <h3>API credentials</h3>
+    <p class="employee-summary">Credentials are stored separately and are never included in environment exports.</p>
+    <select id="environment-credential-origin" class="input"></select>
+    <input id="environment-public-key" class="input" type="text" autocomplete="off" placeholder="Public key" />
+    <input id="environment-private-key" class="input" type="password" autocomplete="new-password" placeholder="Private key" />
+    <label class="check-field check-field--full">
+      <input id="environment-remember" type="checkbox" />
+      <span><strong>Remember on this device</strong><small>Otherwise kept in memory for this Chrome session.</small></span>
+    </label>
+    <p id="environment-credential-status" class="employee-summary">Choose an environment.</p>
+    <div class="environment-toolbar">
+      <button id="environment-credential-save" type="button" class="button button--primary" title="Validate the credentials against the tenant, then save">Validate &amp; save</button>
+      <button id="environment-credential-clear" type="button" class="button button--subtle" title="Remove stored credentials for this environment">Clear</button>
+    </div>
+  </section>
+</div>

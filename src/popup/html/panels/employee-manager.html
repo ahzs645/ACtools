@@ -1,0 +1,130 @@
+<div id="panel-employee-manager" class="tool-panel">
+  <div class="employee-toolbar">
+    <input
+      id="employee-search"
+      class="input"
+      type="search"
+      placeholder="Search name, email, or ID"
+      aria-label="Search employees"
+      autocomplete="off"
+    />
+    <select id="employee-status-filter" class="input" aria-label="Employee status filter">
+      <option value="active">Active</option>
+      <option value="applicant">Applicant</option>
+      <option value="pending">Pending</option>
+      <option value="on_hold">On hold</option>
+      <option value="suspended">Suspended</option>
+      <option value="terminated">Terminated</option>
+      <option value="rejected">Rejected</option>
+      <option value="all">All statuses</option>
+    </select>
+    <button id="employee-refresh" type="button" class="button button--secondary">
+      Refresh
+    </button>
+  </div>
+
+  <div class="employee-sort-bar">
+    <label class="field__label" for="employee-sort">Sort by</label>
+    <select id="employee-sort" class="input">
+      <option value="last_name">Last name</option>
+      <option value="first_name">First name</option>
+      <option value="id">Employee ID</option>
+      <option value="status">Status</option>
+      <option value="email">Email</option>
+    </select>
+    <button id="employee-sort-direction" type="button" class="button button--subtle" aria-label="Reverse employee sort">Ascending ↑</button>
+  </div>
+
+  <p id="employee-summary" class="employee-summary">Open the tool to load employees.</p>
+  <div id="employee-list" class="employee-list" aria-live="polite"></div>
+
+  <section id="employee-detail" class="employee-detail" hidden>
+    <div>
+      <h3 id="employee-detail-name" class="employee-detail__name"></h3>
+      <p id="employee-detail-meta" class="employee-detail__meta"></p>
+    </div>
+    <dl id="employee-detail-fields" class="employee-detail__fields"></dl>
+
+    <div class="employee-status-form">
+      <label class="field__label" for="employee-next-status">Update status</label>
+      <select id="employee-next-status" class="input">
+        <option value="active">Active</option>
+        <option value="applicant">Applicant</option>
+        <option value="pending">Pending</option>
+        <option value="on_hold">On hold</option>
+        <option value="suspended">Suspended</option>
+        <option value="terminated">Terminated</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <input
+        id="employee-status-comment"
+        class="input"
+        type="text"
+        maxlength="240"
+        placeholder="Ticket or reason"
+        aria-label="Status update comment"
+      />
+      <button id="employee-update-status" type="button" class="button button--primary" title="Apply the selected status to the selected employee">
+        Update status
+      </button>
+    </div>
+
+    <div class="employee-copy-form">
+      <div>
+        <h4 class="employee-copy-form__title">Copy to another tenant</h4>
+        <p class="employee-summary">
+          Maps groups, roles, departments, and employment type by name before creating anything.
+        </p>
+      </div>
+      <input
+        id="employee-copy-ticket"
+        class="input"
+        type="text"
+        minlength="5"
+        maxlength="50"
+        placeholder="Ticket number"
+        aria-label="Copy employee ticket number"
+      />
+      <div id="employee-copy-targets" class="employee-copy-targets"></div>
+      <button id="employee-copy-preview" type="button" class="button button--secondary" disabled title="Preview how groups, roles, and departments map on the target tenants">Preview</button>
+      <div id="employee-copy-plan" class="employee-copy-plan"></div>
+      <button id="employee-copy" type="button" class="button button--primary" disabled title="Create the employee on every selected target tenant">Create copies</button>
+      <div id="employee-copy-progress" class="employee-copy-progress"></div>
+    </div>
+  </section>
+
+  <section class="employee-credential-card">
+    <div>
+      <h3 class="uat-smoke-card__title">External API credentials</h3>
+      <p class="uat-smoke-card__body">
+        Required for employee writes. Session-only is the default; remembered keys stay only in this Chrome profile and are never synced.
+      </p>
+      <p id="employee-api-credential-status" class="employee-summary">Not configured.</p>
+    </div>
+    <div class="employee-credential-fields">
+      <input id="employee-api-public-key" class="input" type="text" autocomplete="off" placeholder="Public key" aria-label="AlayaCare API public key" />
+      <input id="employee-api-private-key" class="input" type="password" autocomplete="new-password" placeholder="Private key" aria-label="AlayaCare API private key" />
+      <label class="check-field check-field--full">
+        <input id="employee-api-remember" type="checkbox" />
+        <span>
+          <strong>Remember on this device</strong>
+          <small>Stored on disk in this Chrome profile and visible to extension developer tools.</small>
+        </span>
+      </label>
+      <button id="employee-api-save" type="button" class="button button--primary" title="Save the external API credentials">Save</button>
+      <button id="employee-api-clear" type="button" class="button button--subtle">Clear</button>
+    </div>
+  </section>
+
+  <section class="uat-smoke-card">
+    <div>
+      <h3 class="uat-smoke-card__title">Selected UAT employee test</h3>
+      <p class="uat-smoke-card__body">
+        For a selected employee clearly marked Test: change active → suspended → active and add audit notes.
+      </p>
+    </div>
+    <button id="employee-test-selected" type="button" class="button button--secondary" disabled title="Run the guarded active → suspended → active round trip">
+      Run test
+    </button>
+  </section>
+</div>

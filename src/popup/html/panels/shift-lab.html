@@ -1,0 +1,189 @@
+<div id="panel-shift-lab" class="tool-panel">
+  <section class="utility-card shift-lab-intro">
+    <div>
+      <h3 class="utility-card__title">Unassigned shift scenario builder</h3>
+      <p class="utility-card__body">
+        Resolves real service-location identifiers from the active UAT tenant, then stores
+        the requested shift and ruleset test records locally in this Chrome profile.
+      </p>
+    </div>
+    <p class="shift-lab-boundary">
+      AlayaCare's native scheduler creates client/service visits and does not expose these
+      Shift_* or Ruleset_* fields. Shift Lab does not claim or create a native visit.
+    </p>
+    <div class="shift-lab-mode" aria-label="Shift Lab operating mode">
+      <span class="shift-lab-mode__badge">Local fixture</span>
+      <span>Reads service locations from UAT · writes only to this browser profile</span>
+    </div>
+    <label class="check-field">
+      <input id="shift-lab-uat-confirm" type="checkbox" />
+      <span>
+        <strong>UAT test data only</strong>
+        <small>I will select a test service location and use these records for test-data design.</small>
+      </span>
+    </label>
+  </section>
+
+  <section class="utility-card shift-lab-section">
+    <div class="section-heading-row">
+      <div>
+        <h3>1. Resolve service location</h3>
+        <p class="employee-summary">Searches active CustomerStaffingPosition records in the signed-in UAT tenant.</p>
+      </div>
+    </div>
+    <div class="shift-location-search">
+      <input id="shift-location-search-input" class="input" type="search" value="Heritage Heights" placeholder="Service location" aria-label="Service location search" />
+      <button id="shift-location-search-button" type="button" class="button button--secondary" disabled>Search UAT</button>
+    </div>
+    <div id="shift-location-results" class="shift-location-results" aria-live="polite"></div>
+    <p id="shift-selected-location" class="shift-selected-location">No UAT service location selected.</p>
+    <div id="shift-native-readiness" class="shift-assessment" data-status="blocked">
+      <div class="shift-assessment__heading">
+        <strong>Native AlayaCare visit readiness</strong>
+        <span id="shift-native-readiness-badge" class="shift-assessment__badge">Blocked</span>
+      </div>
+      <p id="shift-native-readiness-summary">Native visit creation is unavailable until every required UAT mapping is resolved.</p>
+      <div id="shift-native-readiness-list" class="shift-assessment__list"></div>
+    </div>
+  </section>
+
+  <section class="utility-card shift-lab-section">
+    <div>
+      <h3>2. Create a local shift ruleset</h3>
+      <p class="employee-summary">Rulesets can contain zero or more future rules. This scenario starts with none.</p>
+    </div>
+    <form id="shift-ruleset-form" class="shift-lab-form">
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-ruleset-name">Ruleset name</label>
+          <input id="shift-ruleset-name" class="input" type="text" value="Approved" maxlength="100" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-ruleset-id">Ruleset ID</label>
+          <input id="shift-ruleset-id" class="input" type="text" value="R0000000032" pattern="R[0-9]{10}" maxlength="11" required />
+        </div>
+      </div>
+      <div class="shift-ruleset-flags">
+        <label><input id="shift-ruleset-ot-approved" type="checkbox" checked /> OT approved</label>
+        <label><input id="shift-ruleset-ignore-capacity" type="checkbox" /> Ignore capacity</label>
+        <label><input id="shift-ruleset-ignore-fatigue" type="checkbox" /> Ignore fatigue</label>
+        <label><input id="shift-ruleset-can-swap" type="checkbox" checked /> Can shift swap</label>
+      </div>
+      <button type="submit" class="button button--primary">Save local ruleset</button>
+    </form>
+    <div id="shift-ruleset-list" class="shift-record-list">No local rulesets yet.</div>
+  </section>
+
+  <section class="utility-card shift-lab-section">
+    <div>
+      <h3>3. Create an unassigned shift scenario</h3>
+      <p class="employee-summary">Duration is calculated. Client and employee relationship collections are always empty.</p>
+    </div>
+    <form id="shift-scenario-form" class="shift-lab-form">
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-name">Shift name</label>
+          <input id="shift-name" class="input" type="text" value="D SHIFT (730-16)" maxlength="120" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-occurrence-id">Occurrence ID</label>
+          <input id="shift-occurrence-id" class="input" type="text" value="S0000000032" pattern="S[0-9]{10}" maxlength="11" required />
+        </div>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-office">Scheduling office</label>
+          <input id="shift-office" class="input" type="text" value="DAW Community" maxlength="100" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-cost-center">Cost center (optional)</label>
+          <input id="shift-cost-center" class="input" type="text" maxlength="100" />
+        </div>
+      </div>
+      <div class="field">
+        <label class="field__label" for="shift-ruleset-select">Shift ruleset (optional)</label>
+        <select id="shift-ruleset-select" class="input"><option value="">No ruleset</option></select>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-start">Shift start</label>
+          <input id="shift-start" class="input" type="datetime-local" value="2026-09-01T07:30" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-end">Shift end</label>
+          <input id="shift-end" class="input" type="datetime-local" value="2026-09-01T16:00" required />
+        </div>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <span class="field__label">Calculated duration</span>
+          <output id="shift-duration" class="shift-derived-value">8.5 hours</output>
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-pay-duration">Pay duration (hours)</label>
+          <input id="shift-pay-duration" class="input" type="number" value="8" min="0.25" max="24" step="0.25" required />
+        </div>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-ot-eligibility">Eligible OT</label>
+          <select id="shift-ot-eligibility" class="input">
+            <option value="Approved">Approved</option>
+            <option value="Not approved">Not approved</option>
+            <option value="Ruleset">Use ruleset</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-timezone">Timezone</label>
+          <input id="shift-timezone" class="input" type="text" value="GMT-7" maxlength="50" required />
+        </div>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-pattern">Shift pattern</label>
+          <input id="shift-pattern" class="input" type="text" value="WX" maxlength="30" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-expires-after">Expires after</label>
+          <input id="shift-expires-after" class="input" type="date" value="2027-09-29" required />
+        </div>
+      </div>
+      <div class="field__row">
+        <div class="field">
+          <label class="field__label" for="shift-code">Shift code</label>
+          <input id="shift-code" class="input" type="text" value="Day8c" maxlength="50" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="shift-swap-event">Swap event (optional)</label>
+          <input id="shift-swap-event" class="input" type="text" maxlength="100" />
+        </div>
+      </div>
+      <details class="shift-audit-details">
+        <summary>Scenario audit fixture</summary>
+        <div class="field__row">
+          <div class="field"><label class="field__label" for="shift-intake-at">Intake date</label><input id="shift-intake-at" class="input" type="datetime-local" value="2025-01-01T00:00" required /></div>
+          <div class="field"><label class="field__label" for="shift-intake-user">Intake user</label><input id="shift-intake-user" class="input" type="text" value="Dubs" maxlength="100" required /></div>
+        </div>
+        <div class="field__row">
+          <div class="field"><label class="field__label" for="shift-changed-at">Change date</label><input id="shift-changed-at" class="input" type="datetime-local" value="2025-01-01T00:00" required /></div>
+          <div class="field"><label class="field__label" for="shift-changed-user">Change user</label><input id="shift-changed-user" class="input" type="text" value="Dubs" maxlength="100" required /></div>
+        </div>
+      </details>
+      <div id="shift-fixture-evaluation" class="shift-assessment" data-status="ready">
+        <div class="shift-assessment__heading">
+          <strong>Local fixture evaluation</strong>
+          <span id="shift-fixture-evaluation-badge" class="shift-assessment__badge">Ready</span>
+        </div>
+        <p id="shift-fixture-evaluation-summary">Reviewing the current fixture…</p>
+        <div id="shift-fixture-evaluation-list" class="shift-assessment__list"></div>
+      </div>
+      <button type="submit" class="button button--primary">Save local shift scenario</button>
+    </form>
+    <div class="utility-actions">
+      <button id="shift-export-last" type="button" class="button button--secondary" disabled>Download last shift JSON</button>
+      <button id="shift-export-registry" type="button" class="button button--secondary" disabled>Download full registry</button>
+    </div>
+    <pre id="shift-lab-summary" class="shift-lab-summary" data-tone="info">Select a UAT service location, then save the ruleset and shift test records locally.</pre>
+    <div id="shift-scenario-list" class="shift-record-list">No local shift scenarios yet.</div>
+  </section>
+</div>
