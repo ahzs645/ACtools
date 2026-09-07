@@ -6,6 +6,14 @@ export interface EnvironmentConfig {
   origin: string;
   name: string;
   supportUrl: string;
+  /**
+   * Optional onboarding-task template for this tenant: the AlayaCare task
+   * cloned for each new employee (see the Employee Manager "Onboarding tasks"
+   * block). Non-secret, so it travels with environment exports.
+   */
+  taskTemplateId?: number;
+  /** Optional regex; the first employee group matching it is preselected as the task's owner. */
+  taskGroupPattern?: string;
 }
 
 export interface EnvironmentRegistry {

@@ -8,6 +8,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   base: "./",
+  resolve: {
+    alias: {
+      "@ac-core": resolve(__dirname, "packages/ac-core/src")
+    }
+  },
   plugins: [htmlInclude({ root: __dirname, entries: ["sidepanel.html"] })],
   build: {
     outDir: "dist",

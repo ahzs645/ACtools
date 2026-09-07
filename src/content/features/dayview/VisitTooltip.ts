@@ -1,6 +1,6 @@
-import { formatError } from "../../../shared/errors";
-import { formatVisitDateTime } from "../../utils/time";
-import type { AlayaCareClient, VisitRecord } from "../../services/AlayaCareClient";
+import { formatError } from "@ac-core/shared/errors";
+import { formatVisitDateTime } from "@ac-core/shared/time";
+import type { AlayaCareClient, VisitRecord } from "@ac-core/session/AlayaCareClient";
 
 const DEFAULT_HIDE_DELAY_MS = 150;
 

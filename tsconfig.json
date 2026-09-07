@@ -16,9 +16,16 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ac-core/*": [
+        "packages/ac-core/src/*"
+      ]
+    }
   },
   "include": [
-    "src"
+    "src",
+    "packages/ac-core/src"
   ]
 }

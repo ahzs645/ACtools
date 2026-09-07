@@ -1,6 +1,6 @@
-import { formatError } from "../../../shared/errors";
-import { addMinutes, ceilTo15, floorTo15, formatHHMMInTimeZone } from "../../utils/time";
-import type { AlayaCareClient, Department, EmployeeRecord } from "../../services/AlayaCareClient";
+import { formatError } from "@ac-core/shared/errors";
+import { addMinutes, ceilTo15, floorTo15, formatHHMMInTimeZone } from "@ac-core/shared/time";
+import type { AlayaCareClient, Department, EmployeeRecord } from "@ac-core/session/AlayaCareClient";
 import {
   cell,
   generate15MinuteSlots,

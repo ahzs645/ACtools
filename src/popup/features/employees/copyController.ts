@@ -6,8 +6,8 @@ import type {
   EmployeeCopyTargetPlan,
   EmployeeCopyTargetResult,
   EmployeeDetail
-} from "../../../shared/employees";
-import { formatError } from "../../../shared/errors";
+} from "@ac-core/shared/employees";
+import { formatError } from "@ac-core/shared/errors";
 import { showToast } from "../../ui/toasts";
 
 interface CopyControllerOptions {

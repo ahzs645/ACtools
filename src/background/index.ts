@@ -1,106 +1,29 @@
 import { getActiveTabId, sendMessageToTab } from "../shared/chrome";
-import { formatError } from "../shared/errors";
-import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
-import type {
-  ClientChartExportSnapshot,
-  ClientChartRankResponse,
-  ClientChartSearchResponse
-} from "../shared/clientChart";
-import type {
-  ClientChartDestinationCatalog,
-  ClientChartImportResult
-} from "../shared/clientChartImport";
-import type { ShiftServiceLocationSearchResponse } from "../shared/shiftLab";
-import {
-  disabledFeatureMessage,
-  loadFeatureFlags,
-  type AcFeatureFlag
-} from "../shared/featureFlags";
-import type {
-  EmployeeApiCredentialStatus,
-  EmployeeConfiguredTenant,
-  EmployeeCopyPlanResult,
-  EmployeeCopyResult,
-  EmployeeCopyTargetResult,
-  EmployeeDetail,
-  EmployeeListResult,
-  EmployeeWriteResult
-} from "../shared/employees";
-import type { EnvironmentHealth, EnvironmentRegistry } from "../shared/environments";
-import type {
-  ConnectorReferenceCatalog,
-  ConnectorScenarioBundle,
-  ConnectorScenarioBulkDownloadResult,
-  ConnectorScenarioHealth,
-  ConnectorScenarioListResult,
-  ConnectorScenarioSaveResult,
-  ConnectorScenarioSnapshot
-} from "../shared/connectorScenarios";
-import type {
-  AvailabilityPostResult,
-  CommandResult,
-  PageStatus,
-  RuntimeMessage,
-  Surface
-} from "../shared/messages";
+import { formatError } from "@ac-core/shared/errors";
+import type { CommandResult, ContentCommandData, RuntimeMessage, Surface } from "@ac-core/shared/messages";
 import {
   DEFAULT_SURFACE,
   SURFACE_STORAGE_KEY,
   isPopupMessage,
   isRuntimeMessage
-} from "../shared/messages";
+} from "@ac-core/shared/messages";
+import { createPopupRouter } from "@ac-core/router";
 import { getSupportedTabOrigin, isSupportedAlayaCareUrl } from "./alayaCareUrls";
-import {
-  importEnvironmentRegistry,
-  loadEnvironmentRegistry,
-  saveEnvironment,
-  setDefaultEnvironment
-} from "./environments/environmentStore";
-import {
-  checkEnvironmentHealth,
-  clearEmployeeCredentials,
-  copyEmployeeLegacy,
-  copyEmployeeTarget,
-  getEmployeeCredentialStatus,
-  listEmployeeConfiguredTenants,
-  planEmployeeCopy,
-  removeEmployeeEnvironment,
-  setEmployeeCredentials,
-  synchronizeCredentialEnvironments,
-  updateEmployeeStatus
-} from "./employees/employeeService";
+import { chromePlatform } from "./platform";
 
 const SIDE_PANEL_PATH = "sidepanel.html";
 const POPUP_PATH = "sidepanel.html?surface=popup";
 
-type PopupResponseData =
-  | PageStatus
-  | AvailabilityPostResult
-  | AlayaCareFormContextCatalogSnapshot
-  | ClientChartExportSnapshot
-  | ClientChartSearchResponse
-  | ClientChartRankResponse
-  | ClientChartImportResult
-  | ClientChartDestinationCatalog
-  | ShiftServiceLocationSearchResponse
-  | ConnectorScenarioSnapshot
-  | ConnectorScenarioBundle
-  | ConnectorScenarioBulkDownloadResult
-  | ConnectorScenarioListResult
-  | ConnectorReferenceCatalog
-  | ConnectorScenarioHealth
-  | ConnectorScenarioSaveResult
-  | EmployeeListResult
-  | EmployeeDetail
-  | EmployeeWriteResult
-  | EmployeeApiCredentialStatus
-  | EmployeeConfiguredTenant[]
-  | EmployeeCopyResult
-  | EmployeeCopyPlanResult
-  | EmployeeCopyTargetResult
-  | EnvironmentRegistry
-  | EnvironmentHealth
-  | void;
+/**
+ * Everything except surface management is shared with the desktop app. Here
+ * "the current tenant" is the active tab, and session commands run in that
+ * tab's content script.
+ */
+const router = createPopupRouter({
+  platform: chromePlatform,
+  getActiveOrigin: async () => getSupportedTabOrigin(await getActiveTabId()),
+  sendSessionMessage: async (message) => sendMessageToTab(await getActiveTabId(), message)
+});
 
 let currentSurface: Surface = DEFAULT_SURFACE;
 
@@ -142,170 +65,15 @@ async function initialize(): Promise<void> {
   await applySurface(currentSurface);
 }
 
-/** Popup messages that an optional tool owns, and the flag that gates them. */
-const FEATURE_GATED_MESSAGES: Record<string, AcFeatureFlag> = {
-  "ac/popup/search-client-charts": "clientChartSnapshot",
-  "ac/popup/rank-client-charts": "clientChartSnapshot",
-  "ac/popup/export-active-client-chart": "clientChartSnapshot",
-  "ac/popup/import-client-chart": "clientChartImport",
-  "ac/popup/get-client-chart-destinations": "clientChartImport"
-};
-
-async function refuseDisabledFeature(
-  messageType: string
-): Promise<CommandResult<PopupResponseData> | null> {
-  const flag = FEATURE_GATED_MESSAGES[messageType];
-  if (!flag) {
-    return null;
-  }
-
-  const flags = await loadFeatureFlags();
-  return flags[flag] ? null : { ok: false, error: disabledFeatureMessage(flag) };
-}
-
 async function handlePopupMessage(
   message: Extract<RuntimeMessage, { type: `ac/popup/${string}` }>
-): Promise<CommandResult<PopupResponseData>> {
+): Promise<CommandResult<ContentCommandData>> {
   if (message.type === "ac/popup/set-surface") {
     await chrome.storage.local.set({ [SURFACE_STORAGE_KEY]: message.payload });
     await applySurface(message.payload);
     return { ok: true };
   }
-
-  const refusal = await refuseDisabledFeature(message.type);
-  if (refusal) {
-    return refusal;
-  }
-
-  const tabId = await getActiveTabId();
-  switch (message.type) {
-    case "ac/popup/get-status":
-      return sendMessageToTab<PageStatus>(tabId, { type: "ac/content/get-status" });
-    case "ac/popup/open-day-view":
-      return sendMessageToTab<void>(tabId, { type: "ac/content/open-day-view" });
-    case "ac/popup/post-availability":
-      return sendMessageToTab<AvailabilityPostResult>(tabId, {
-        type: "ac/content/post-availability",
-        payload: message.payload
-      });
-    case "ac/popup/export-form-context-catalog":
-      return sendMessageToTab<AlayaCareFormContextCatalogSnapshot>(tabId, {
-        type: "ac/content/export-form-context-catalog"
-      });
-    case "ac/popup/search-client-charts":
-      return sendMessageToTab<ClientChartSearchResponse>(tabId, {
-        type: "ac/content/search-client-charts",
-        payload: message.payload
-      });
-    case "ac/popup/rank-client-charts":
-      return sendMessageToTab<ClientChartRankResponse>(tabId, {
-        type: "ac/content/rank-client-charts",
-        payload: message.payload
-      });
-    case "ac/popup/export-active-client-chart":
-      return sendMessageToTab<ClientChartExportSnapshot>(tabId, {
-        type: "ac/content/export-active-client-chart",
-        payload: message.payload
-      });
-    case "ac/popup/import-client-chart":
-      return sendMessageToTab<ClientChartImportResult>(tabId, {
-        type: "ac/content/import-client-chart",
-        payload: message.payload
-      });
-    case "ac/popup/get-client-chart-destinations":
-      return sendMessageToTab<ClientChartDestinationCatalog>(tabId, {
-        type: "ac/content/get-client-chart-destinations",
-        payload: message.payload
-      });
-    case "ac/popup/search-shift-service-locations":
-      return sendMessageToTab<ShiftServiceLocationSearchResponse>(tabId, {
-        type: "ac/content/search-shift-service-locations",
-        payload: message.payload
-      });
-    case "ac/popup/get-connector-scenario":
-      return sendMessageToTab<ConnectorScenarioSnapshot>(tabId, {
-        type: "ac/content/get-connector-scenario",
-        payload: message.payload
-      });
-    case "ac/popup/list-connector-scenarios":
-      return sendMessageToTab<ConnectorScenarioListResult>(tabId, {
-        type: "ac/content/list-connector-scenarios"
-      });
-    case "ac/popup/export-connector-scenario-bundle":
-      return sendMessageToTab<ConnectorScenarioBundle>(tabId, {
-        type: "ac/content/export-connector-scenario-bundle",
-        payload: message.payload
-      });
-    case "ac/popup/download-all-connector-scenarios":
-      return sendMessageToTab<ConnectorScenarioBulkDownloadResult>(tabId, {
-        type: "ac/content/download-all-connector-scenarios"
-      });
-    case "ac/popup/get-connector-reference-catalog":
-      return sendMessageToTab<ConnectorReferenceCatalog>(tabId, {
-        type: "ac/content/get-connector-reference-catalog"
-      });
-    case "ac/popup/get-connector-scenario-health":
-      return sendMessageToTab<ConnectorScenarioHealth>(tabId, {
-        type: "ac/content/get-connector-scenario-health",
-        payload: message.payload
-      });
-    case "ac/popup/save-connector-scenario":
-      return sendMessageToTab<ConnectorScenarioSaveResult>(tabId, {
-        type: "ac/content/save-connector-scenario",
-        payload: message.payload
-      });
-    case "ac/popup/list-employees":
-      return sendMessageToTab<EmployeeListResult>(tabId, {
-        type: "ac/content/list-employees",
-        payload: message.payload
-      });
-    case "ac/popup/get-employee":
-      return sendMessageToTab<EmployeeDetail>(tabId, {
-        type: "ac/content/get-employee",
-        payload: message.payload
-      });
-    case "ac/popup/get-employee-api-credential-status":
-      return {
-        ok: true,
-        data: await getEmployeeCredentialStatus(tabId, message.payload?.origin)
-      };
-    case "ac/popup/set-employee-api-credentials":
-      return { ok: true, data: await setEmployeeCredentials(tabId, message.payload) };
-    case "ac/popup/clear-employee-api-credentials":
-      return {
-        ok: true,
-        data: await clearEmployeeCredentials(tabId, message.payload?.origin)
-      };
-    case "ac/popup/list-employee-configured-tenants":
-      return { ok: true, data: await listEmployeeConfiguredTenants() };
-    case "ac/popup/plan-employee-copy":
-      return { ok: true, data: await planEmployeeCopy(message.payload) };
-    case "ac/popup/copy-employee-target":
-      return {
-        ok: true,
-        data: await copyEmployeeTarget(message.payload.sourceOrigin, message.payload)
-      };
-    case "ac/popup/copy-employee":
-      return { ok: true, data: await copyEmployeeLegacy(tabId, message.payload) };
-    case "ac/popup/update-employee-status":
-      return { ok: true, data: await updateEmployeeStatus(tabId, message.payload) };
-    case "ac/popup/get-environment-registry":
-      await synchronizeCredentialEnvironments();
-      return { ok: true, data: await loadEnvironmentRegistry() };
-    case "ac/popup/save-environment":
-      return { ok: true, data: await saveEnvironment(message.payload) };
-    case "ac/popup/delete-environment":
-      await removeEmployeeEnvironment(message.payload.origin);
-      return { ok: true, data: await loadEnvironmentRegistry() };
-    case "ac/popup/set-default-environment":
-      return { ok: true, data: await setDefaultEnvironment(message.payload.origin) };
-    case "ac/popup/import-environments":
-      return { ok: true, data: await importEnvironmentRegistry(message.payload) };
-    case "ac/popup/check-environment-health":
-      return { ok: true, data: await checkEnvironmentHealth(message.payload.origin) };
-    default:
-      return { ok: false, error: "Unsupported popup action." };
-  }
+  return router.handle(message);
 }
 
 async function loadStoredSurface(): Promise<Surface> {

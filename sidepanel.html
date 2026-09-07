@@ -63,6 +63,15 @@
         </div>
       </header>
 
+      <!-- Desktop host only: which signed-in tenant the session pathway uses. -->
+      <div id="desktop-tenant-bar" class="tenant-bar" hidden>
+        <label class="tenant-bar__label" for="desktop-tenant-select">Tenant</label>
+        <select id="desktop-tenant-select" class="input tenant-bar__select" aria-label="Active tenant"></select>
+        <button id="desktop-tenant-sign-in" type="button" class="button button--primary" title="Open the tenant's sign-in page in a window. The session stays in this app.">Sign in</button>
+        <button id="desktop-tenant-sign-out" type="button" class="button button--subtle" title="Forget this tenant's cookies">Sign out</button>
+        <p id="desktop-tenant-status" class="tenant-bar__status">No tenant selected.</p>
+      </div>
+
       <!-- @include src/popup/html/launcher.html -->
 
       <section id="view-detail" class="view" aria-labelledby="detail-title" hidden>

@@ -142,3 +142,31 @@ export interface EmployeeCopyResult {
   sourceEmployeeId: number;
   results: EmployeeCopyTargetResult[];
 }
+
+/** Clone a tenant's onboarding task template for one employee. */
+export interface EmployeeTaskCloneRequest {
+  templateTaskId: number;
+  employeeId: number;
+  /** Employee group (team) that owns the cloned task. Must be one of the employee's groups. */
+  groupId: number;
+  name: string;
+}
+
+export interface EmployeeTaskClonePreview {
+  template: { id: number; name: string; status?: string };
+  employee: { id: number; name: string };
+  group: { id: number; name: string };
+  proposedName: string;
+}
+
+export interface EmployeeTaskCloneExecuteRequest extends EmployeeTaskCloneRequest {
+  ticket: string;
+  confirmed: boolean;
+}
+
+export interface EmployeeTaskCloneResult {
+  taskId: number;
+  name: string;
+  cloneStatus: number;
+  assignStatus: number;
+}

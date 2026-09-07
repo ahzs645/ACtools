@@ -1,16 +1,17 @@
 import "./styles.css";
 
 import { sendRuntimeMessage } from "../shared/chrome";
-import { formatError } from "../shared/errors";
-import type { AlayaCareFormContextCatalogSnapshot } from "../shared/formContextCatalog";
+import { getAppVersion, popupStorage } from "./platform";
+import { formatError } from "@ac-core/shared/errors";
+import type { AlayaCareFormContextCatalogSnapshot } from "@ac-core/shared/formContextCatalog";
 import type {
   ClientChartExportSnapshot,
   ClientChartRankedResult,
   ClientChartRankResponse,
   ClientChartSearchResponse,
   ClientChartSearchResult
-} from "../shared/clientChart";
-import type { ClientChartPdfParseSnapshot } from "../shared/clientChartPdf";
+} from "@ac-core/shared/clientChart";
+import type { ClientChartPdfParseSnapshot } from "@ac-core/shared/clientChartPdf";
 import {
   buildClientChartImportPreview,
   isSyntheticClientName,
@@ -18,9 +19,9 @@ import {
   type ClientChartDestinationGroup,
   type ClientChartImportPreview,
   type ClientChartImportResult
-} from "../shared/clientChartImport";
-import { buildAlayaCareCatalogCsv } from "../shared/formContextCsv";
-import { buildAlayaCareCatalogXlsx } from "../shared/formContextXlsx";
+} from "@ac-core/shared/clientChartImport";
+import { buildAlayaCareCatalogCsv } from "@ac-core/shared/formContextCsv";
+import { buildAlayaCareCatalogXlsx } from "@ac-core/shared/formContextXlsx";
 import type {
   EmployeeApiCredentialStatus,
   EmployeeConfiguredTenant,
@@ -28,8 +29,8 @@ import type {
   EmployeeListResult,
   EmployeeSummary,
   EmployeeWriteResult
-} from "../shared/employees";
-import type { AppPreferences } from "../shared/environments";
+} from "@ac-core/shared/employees";
+import type { AppPreferences } from "@ac-core/shared/environments";
 import {
   DEFAULT_FEATURE_FLAGS,
   FEATURE_FLAG_LABELS,
@@ -38,11 +39,13 @@ import {
   saveFeatureFlags,
   type AcFeatureFlag,
   type AcFeatureFlags
-} from "../shared/featureFlags";
+} from "@ac-core/shared/featureFlags";
 import { EnvironmentManagerController } from "./features/environments/controller";
 import { ConnectorUtilitiesController } from "./features/connectors/controller";
 import { clearEmployeeCaches, cacheEmployees, loadCachedEmployees } from "./features/employees/cache";
 import { EmployeeCopyController } from "./features/employees/copyController";
+import { EmployeeTaskCloneController } from "./features/employees/taskCloneController";
+import { DesktopTenantBar } from "./features/desktop/tenantBar";
 import { ShiftLabController } from "./features/shifts/controller";
 import {
   type EmployeeSortField,
@@ -67,7 +70,7 @@ import {
   type AvailabilityPostResult,
   type PageStatus,
   type Surface
-} from "../shared/messages";
+} from "@ac-core/shared/messages";
 
 const THEME_STORAGE_KEY = "ac-tools-theme";
 
@@ -112,6 +115,7 @@ let featureFlags: AcFeatureFlags = { ...DEFAULT_FEATURE_FLAGS };
 const elements = getPopupElements();
 const environmentManager = new EnvironmentManagerController(async () => {
   await refreshConfiguredEmployeeTenants();
+  await desktopTenantBar.refresh();
 });
 const connectorUtilities = new ConnectorUtilitiesController();
 const shiftLab = new ShiftLabController();
@@ -123,6 +127,27 @@ const employeeCopyController = new EmployeeCopyController({
   getCurrentOrigin: () => currentEmployeeOrigin,
   getSupportUrl: (origin) => environmentManager.getSupportUrl(origin),
   getEnvironmentName: (origin) => environmentManager.getEnvironmentName(origin)
+});
+
+const employeeTaskCloneController = new EmployeeTaskCloneController({
+  getEmployee: () => selectedEmployee,
+  getEmployeeName: employeeDisplayName,
+  getCurrentOrigin: () => currentEmployeeOrigin,
+  getEnvironment: (origin) => environmentManager.getEnvironment(origin)
+});
+// Desktop host only: switching tenants changes what every session command
+// talks to, so the status card, credentials, and employee list all reload.
+const desktopTenantBar = new DesktopTenantBar(async () => {
+  employeeItems = [];
+  selectedEmployee = null;
+  elements.employeeDetail.hidden = true;
+  renderEmployeeList();
+  await refreshStatus();
+  await refreshEmployeeApiCredentialStatus();
+  await refreshConfiguredEmployeeTenants();
+  if (activePanelName === "employee-manager") {
+    await loadEmployees();
+  }
 });
 
 void init();
@@ -138,8 +163,10 @@ async function init(): Promise<void> {
   await refreshStatus();
   await environmentManager.init();
   employeeCopyController.init();
-  elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
-  featureFlags = await loadFeatureFlags();
+  employeeTaskCloneController.init();
+  await desktopTenantBar.init();
+  elements.extensionVersion.textContent = `v${await getAppVersion()}`;
+  featureFlags = await loadFeatureFlags(popupStorage.local);
   applyFeatureFlagToggles();
   applyClientChartGuard();
 
@@ -536,7 +563,7 @@ function filterTiles(query: string): void {
 
 function readInitialSurface(): Surface {
   const fromHtml = document.documentElement.dataset.surface;
-  if (fromHtml === "popup" || fromHtml === "sidepanel") {
+  if (fromHtml === "popup" || fromHtml === "sidepanel" || fromHtml === "desktop") {
     return fromHtml;
   }
   return DEFAULT_SURFACE;
@@ -545,8 +572,7 @@ function readInitialSurface(): Surface {
 async function applyStoredSurfaceSelection(): Promise<void> {
   let stored: Surface = DEFAULT_SURFACE;
   try {
-    const result = await chrome.storage.local.get(SURFACE_STORAGE_KEY);
-    const value = result[SURFACE_STORAGE_KEY];
+    const value = await popupStorage.local.get(SURFACE_STORAGE_KEY);
     if (value === "popup" || value === "sidepanel") {
       stored = value;
     }
@@ -598,8 +624,7 @@ async function applyStoredTheme(): Promise<void> {
   let mode: ThemeMode = "system";
 
   try {
-    const stored = await chrome.storage.local.get(THEME_STORAGE_KEY);
-    const value = stored[THEME_STORAGE_KEY];
+    const value = await popupStorage.local.get(THEME_STORAGE_KEY);
     if (value === "light" || value === "dark" || value === "system") {
       mode = value;
     }
@@ -615,7 +640,7 @@ async function handleThemeChange(next: ThemeMode): Promise<void> {
   setTheme(next);
 
   try {
-    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: next });
+    await popupStorage.local.set(THEME_STORAGE_KEY, next);
   } catch {
     // ignore — runtime may not have storage access
   }
@@ -628,7 +653,7 @@ async function toggleTheme(): Promise<void> {
   selectRadio(elements.themeRadios, next);
 
   try {
-    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: next });
+    await popupStorage.local.set(THEME_STORAGE_KEY, next);
   } catch {
     // ignore — runtime may not have storage access
   }
@@ -884,6 +909,7 @@ async function loadEmployeeDetail(employeeId: number): Promise<void> {
     selectedEmployee = null;
     updateSelectedEmployeeTestAvailability();
     employeeCopyController.selectedEmployeeChanged();
+    employeeTaskCloneController.selectedEmployeeChanged();
     elements.employeeDetailName.textContent = "Employee unavailable";
     elements.employeeDetailMeta.textContent = formatError(error);
     showToast("error", "Employee details unavailable", formatError(error));
@@ -1667,7 +1693,7 @@ async function handleFeatureFlagChange(toggle: HTMLInputElement): Promise<void> 
 
   const previous = featureFlags[flag];
   try {
-    featureFlags = await saveFeatureFlags({ ...featureFlags, [flag]: toggle.checked });
+    featureFlags = await saveFeatureFlags(popupStorage.local, { ...featureFlags, [flag]: toggle.checked });
     applyFeatureFlagToggles();
     applyClientChartGuard();
     if (clientChartView !== "menu" && !isClientChartViewEnabled(clientChartView)) {
@@ -2590,7 +2616,7 @@ async function parseSelectedClientChartPdfs(): Promise<void> {
     elements.downloadClientChartPdfJsonButton.disabled = true;
     elements.clientChartPdfSummary.textContent = "Loading the local PDF parser…";
     try {
-      const { parseClientChartPdfBatch } = await import("../shared/clientChartPdf");
+      const { parseClientChartPdfBatch } = await import("@ac-core/shared/clientChartPdf");
       const snapshot = await parseClientChartPdfBatch(files, true, (progress) => {
         elements.clientChartPdfSummary.textContent = [
           `Parsing ${progress.fileName}`,
@@ -2752,7 +2778,9 @@ function safeFileNamePart(value: string): string {
 }
 
 async function refreshStatus(): Promise<void> {
-  elements.statusText.textContent = "Checking current tab\u2026";
+  elements.statusText.textContent = desktopTenantBar.enabled
+    ? "Checking the selected tenant\u2026"
+    : "Checking current tab\u2026";
 
   try {
     const response = await sendRuntimeMessage<PageStatus>({ type: "ac/popup/get-status" });
@@ -2794,8 +2822,7 @@ function readDraft(): AvailabilityDraft {
 }
 
 async function hydrateForm(): Promise<void> {
-  const storage = await chrome.storage.local.get(POPUP_FORM_STORAGE_KEY);
-  const draft = mergeDraft(storage[POPUP_FORM_STORAGE_KEY]);
+  const draft = mergeDraft(await popupStorage.local.get(POPUP_FORM_STORAGE_KEY));
 
   setFieldValue("employeeId", String(draft.employeeId));
   setFieldValue("availabilityTypeId", String(draft.availabilityTypeId));
@@ -2806,9 +2833,7 @@ async function hydrateForm(): Promise<void> {
 }
 
 async function persistDraft(draft: AvailabilityDraft): Promise<void> {
-  await chrome.storage.local.set({
-    [POPUP_FORM_STORAGE_KEY]: draft
-  });
+  await popupStorage.local.set(POPUP_FORM_STORAGE_KEY, draft);
 }
 
 function mergeDraft(candidate: unknown): AvailabilityDraft {

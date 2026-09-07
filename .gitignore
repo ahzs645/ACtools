@@ -5,6 +5,11 @@
 /dist/
 /releases/
 
+# Desktop app build and installers
+/desktop/out/
+/desktop/release/
+/desktop/smoke.png
+
 # Generated patient-chart data and local scratch files
 /output/
 /tmp/

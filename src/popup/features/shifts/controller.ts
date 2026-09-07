@@ -1,5 +1,5 @@
 import { sendRuntimeMessage } from "../../../shared/chrome";
-import { formatError } from "../../../shared/errors";
+import { formatError } from "@ac-core/shared/errors";
 import {
   EMPTY_SHIFT_LAB_REGISTRY,
   SHIFT_LAB_SCHEMA_VERSION,
@@ -16,8 +16,9 @@ import {
   type ShiftScenarioRecord,
   type ShiftServiceLocation,
   type ShiftServiceLocationSearchResponse
-} from "../../../shared/shiftLab";
+} from "@ac-core/shared/shiftLab";
 import { showToast } from "../../ui/toasts";
+import { popupStorage } from "../../platform";
 
 export class ShiftLabController {
   private registry: ShiftLabRegistry = structuredClone(EMPTY_SHIFT_LAB_REGISTRY);
@@ -110,8 +111,7 @@ export class ShiftLabController {
   }
 
   private async hydrate(): Promise<void> {
-    const stored = await chrome.storage.local.get(SHIFT_LAB_STORAGE_KEY);
-    this.registry = parseShiftLabRegistry(stored[SHIFT_LAB_STORAGE_KEY]);
+    this.registry = parseShiftLabRegistry(await popupStorage.local.get(SHIFT_LAB_STORAGE_KEY));
     this.lastShift = this.registry.shifts.at(-1) ?? null;
     if (this.registry.rulesets.length > 0) {
       this.rulesetId.value = nextScenarioIdentifier(
@@ -326,7 +326,7 @@ export class ShiftLabController {
   }
 
   private async persist(): Promise<void> {
-    await chrome.storage.local.set({ [SHIFT_LAB_STORAGE_KEY]: this.registry });
+    await popupStorage.local.set(SHIFT_LAB_STORAGE_KEY, this.registry);
   }
 
   private updateDuration(): void {

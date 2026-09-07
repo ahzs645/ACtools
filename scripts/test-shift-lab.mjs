@@ -11,7 +11,7 @@ const bundlePath = join(tempDirectory, "shiftLab.mjs");
 
 try {
   await build({
-    entryPoints: ["src/shared/shiftLab.ts"],
+    entryPoints: ["packages/ac-core/src/shared/shiftLab.ts"],
     outfile: bundlePath,
     bundle: true,
     platform: "node",

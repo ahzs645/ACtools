@@ -1,5 +1,5 @@
-import { addMinutes, parseUtcRruleDate } from "../../utils/time";
-import type { VisitRecord } from "../../services/AlayaCareClient";
+import { addMinutes, parseUtcRruleDate } from "@ac-core/shared/time";
+import type { VisitRecord } from "@ac-core/session/AlayaCareClient";
 
 export interface ScheduleOccurrence {
   occStart: Date;

@@ -1,4 +1,5 @@
-import type { EmployeeListResult } from "../../../shared/employees";
+import type { EmployeeListResult } from "@ac-core/shared/employees";
+import { popupStorage } from "../../platform";
 
 const CACHE_PREFIX = "ac-tools-employee-cache:";
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -20,11 +21,10 @@ export async function loadCachedEmployees(
     return null;
   }
   const storageKey = key(origin, status);
-  const stored = await chrome.storage.session.get(storageKey);
-  const cached = stored[storageKey] as CachedEmployees | undefined;
+  const cached = await popupStorage.session.get<CachedEmployees>(storageKey);
   if (!cached || Date.now() - cached.timestamp > CACHE_TTL_MS) {
     if (cached) {
-      await chrome.storage.session.remove(storageKey);
+      await popupStorage.session.remove(storageKey);
     }
     return null;
   }
@@ -39,16 +39,16 @@ export async function cacheEmployees(
   if (!origin) {
     return;
   }
-  await chrome.storage.session.set({
-    [key(origin, status)]: { timestamp: Date.now(), result } satisfies CachedEmployees
-  });
+  await popupStorage.session.set(key(origin, status), {
+    timestamp: Date.now(),
+    result
+  } satisfies CachedEmployees);
 }
 
 export async function clearEmployeeCaches(origin: string): Promise<void> {
-  const stored = await chrome.storage.session.get(null);
   const prefix = `${CACHE_PREFIX}${origin}:`;
-  const keys = Object.keys(stored).filter((storageKey) => storageKey.startsWith(prefix));
+  const keys = (await popupStorage.session.keys()).filter((storageKey) => storageKey.startsWith(prefix));
   if (keys.length > 0) {
-    await chrome.storage.session.remove(keys);
+    await popupStorage.session.remove(keys);
   }
 }

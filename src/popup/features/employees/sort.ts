@@ -1,4 +1,4 @@
-import type { EmployeeSummary } from "../../../shared/employees";
+import type { EmployeeSummary } from "@ac-core/shared/employees";
 
 export type EmployeeSortField = "id" | "first_name" | "last_name" | "status" | "email";
 export type SortDirection = "asc" | "desc";

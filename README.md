@@ -1,6 +1,6 @@
 # AC Tools
 
-A Manifest V3 Chrome extension that turns one-off console scripts for AlayaCare scheduling into a maintainable side-panel toolkit.
+A Manifest V3 Chrome extension that turns one-off console scripts for AlayaCare scheduling into a maintainable side-panel toolkit. The same panel and services also ship as a [desktop app](desktop/README.md) for use outside the browser.
 
 ## Install
 
@@ -15,6 +15,14 @@ You do not need to clone this repo or install Node. Grab the latest release zip 
 
 To update later, download the next release zip, replace the folder contents, and hit the reload icon on the AC Tools card in `chrome://extensions`.
 
+### Desktop app
+
+If Developer mode is not an option, or you want the tools outside Chrome, install the desktop app
+from the same release: `ac-tools-desktop-<version>-setup.exe` (Windows), `.dmg` (macOS), or
+`.AppImage` (Linux). It runs the identical panel with a signed-in tenant session and the API-key
+pathway; see [desktop/README.md](desktop/README.md) for first-run steps and what it cannot do (the
+Day View overlay and the page button need an AlayaCare tab).
+
 ## Current features
 
 - `Day View` overlay for side-by-side employee schedule comparison, delivered as a jQuery-free content feature
@@ -27,8 +35,9 @@ To update later, download the next release zip, replace the folder contents, and
 - local parsing of AlayaCare client-chart batch PDFs into JSON with reconstructed page text, report groups, client identifiers, batch dates, and visit-day/visit-ID indexes
 - `Connector Utilities` for scenario backup and JSON editing, read-only operations health, semantic blueprint audits, draft/published comparison, and sanitized inventories of Templates, Connections, Webhooks, Functions, Keys, Data Stores, and Data Structures
 - `Employee Manager` for authenticated employee search, session caching, configurable sorting, details, status updates, audit notes, and guarded cross-tenant employee copying
+- guarded `Onboarding tasks` in Employee Manager that clone a tenant's task template for the selected employee and assign it to one of the employee's own groups, with a dry-run preview, a ticket reference, and a confirmation before the two writes
 - copy dry runs with duplicate detection, automatic and manual group/role/department/employment-type mappings, ServiceNow shortcuts, and per-tenant execution progress
-- `Environment Manager` for friendly tenant names, add/edit/delete, a default tenant, non-secret import/export, per-tenant credential setup, and authentication/metadata health checks
+- `Environment Manager` for friendly tenant names, add/edit/delete, a default tenant, optional onboarding-task template and owning-group pattern per tenant, non-secret import/export, per-tenant credential setup, and authentication/metadata health checks
 - validated external API credentials that default to memory-only session storage, with an explicit opt-in to remember keys locally in the current Chrome profile; credentials are never synced or embedded in the extension
 - a UAT round-trip test that operates only on a selected employee clearly marked as a test record
 - configurable employee status choices and default timezone, plus an in-extension changelog and toast notifications
@@ -163,18 +172,28 @@ Everything below is for people working on the extension itself. End users should
 ### Project structure
 
 ```text
-public/manifest.json      Chrome extension manifest
-src/background/           MV3 service worker
-src/background/employees/ Credential storage and external employee/copy/health services
-src/background/environments/ Non-secret environment registry storage
-src/content/              content script, overlay, page integration, AlayaCare API client
-src/popup/features/       Modular environment, employee copy/cache/sort, and preferences controllers
-src/popup/ui/             Shared side-panel UI helpers such as toast notifications
-src/popup/                shared drawer UI entry point used by the side panel page
-src/shared/               typed messages and shared helpers
-scripts/build.mjs         build orchestration for popup/background/content
-scripts/package.mjs       version sync, build, and release zip
+public/manifest.json           Chrome extension manifest
+packages/ac-core/              Host-agnostic core shared by the extension and the desktop app (see its README)
+packages/ac-core/src/shared/   Typed messages, employee/environment/chart/connector types and helpers
+packages/ac-core/src/external/ API-key pathway: credential store, environment registry, employee service
+packages/ac-core/src/session/  Session pathway: AlayaCareClient and the ac/content/* dispatcher
+packages/ac-core/src/router.ts The ac/popup/* router both hosts wrap
+src/background/                MV3 service worker: chrome.storage adapter, tab-based session, surfaces
+src/content/                   Content script: binds AlayaCareClient to the page, Day View overlay, page button
+src/popup/features/            Environment, employee copy/task-clone/cache/sort, desktop tenant bar, preferences
+src/popup/platform.ts          Host bridge: chrome.* in the extension, window.acBridge in the desktop app
+src/popup/ui/                  Shared side-panel UI helpers such as toast notifications
+src/popup/                     Shared drawer UI entry point used by the side panel page
+src/shared/chrome.ts           Extension-only messaging helpers
+scripts/build.mjs              Build orchestration for popup/background/content
+scripts/package.mjs            Version sync, build, and release zip
+desktop/                       Electron host (npm workspace): renders sidepanel.html, runs ac-core in main
 ```
+
+The desktop app renders the same `sidepanel.html` in an Electron window and provides
+`window.acBridge` instead of `chrome.*`. Keep `packages/ac-core` free of Chrome, DOM, and Electron
+references, and keep new popup storage going through `src/popup/platform.ts`, and both hosts stay in
+step. See [desktop/README.md](desktop/README.md).
 
 ### Development
 
@@ -182,7 +201,9 @@ scripts/package.mjs       version sync, build, and release zip
 npm install
 npm run dev        # watch build into dist/
 npm run build      # one-off production build
-npm run typecheck  # tsc --noEmit
+npm run typecheck  # extension + packages/ac-core + desktop
+npm run desktop:dev      # the Electron app with hot reload (see desktop/README.md)
+npm run desktop:package  # installers into desktop/release
 ```
 
 While developing, load the `dist/` folder into Chrome via `chrome://extensions` → Developer mode → Load unpacked. The watch build will keep `dist/` in sync; click the reload icon on the extension card after saving.
@@ -198,7 +219,7 @@ npm version patch        # or minor / major — bumps package.json and creates a
 git push --follow-tags
 ```
 
-The workflow verifies the tag matches `package.json`, runs typecheck, runs `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to the release. End users then follow the [Install](#install) instructions above.
+The workflow verifies the tag matches `package.json`, runs typecheck, runs `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to the release. A second job then builds the desktop installers on Windows, macOS, and Linux and attaches them to the same release. End users then follow the [Install](#install) instructions above.
 
 To produce a release zip locally without publishing:
 

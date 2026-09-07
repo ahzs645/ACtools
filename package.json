@@ -1,6 +1,6 @@
 {
   "name": "ac-tools",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "Chrome extension toolkit for AlayaCare scheduling and rotation workflows.",
@@ -10,17 +10,25 @@
     "dev": "node scripts/build.mjs --watch",
     "package": "node scripts/package.mjs",
     "test:shift-lab": "node scripts/test-shift-lab.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && npm run typecheck:core && npm run typecheck --workspace desktop",
+    "typecheck:core": "tsc --noEmit -p packages/ac-core/tsconfig.json",
+    "desktop:dev": "npm run dev --workspace desktop",
+    "desktop:build": "npm run build --workspace desktop",
+    "desktop:smoke": "npm run smoke --workspace desktop",
+    "desktop:package": "npm run package --workspace desktop"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "@types/node": "^22.9.0",
     "esbuild": "^0.25.4",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^7.1.0"
   },
   "dependencies": {
     "fflate": "^0.8.3",
     "pdfjs-dist": "^6.2.108"
-  }
+  },
+  "workspaces": [
+    "desktop"
+  ]
 }

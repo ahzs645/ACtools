@@ -1,0 +1,36 @@
+appId: ca.northernhealth.actools
+productName: AC Tools
+copyright: MIT (c) 2025 Northern Health
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+asarUnpack:
+  - "**/node_modules/pdfjs-dist/**"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+  artifactName: ac-tools-desktop-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  icon: resources/icon.png
+  category: public.app-category.productivity
+  artifactName: ac-tools-desktop-${version}.${ext}
+linux:
+  target:
+    - AppImage
+  icon: resources/icon.png
+  category: Office
+  artifactName: ac-tools-desktop-${version}.${ext}
+publish: null
