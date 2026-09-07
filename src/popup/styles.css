@@ -2724,3 +2724,64 @@ input[type="file"].input::file-selector-button {
     grid-column: 1 / -1;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Desktop host (Alayaduck). The same panel, wider and without extension-only
+ * settings. The tenant bar is only unhidden by the desktop tenant switcher.
+ * ------------------------------------------------------------------------- */
+
+html[data-surface="desktop"] body {
+  min-width: 0;
+  min-height: 100vh;
+}
+
+html[data-surface="desktop"] #app {
+  max-width: 860px;
+  margin: 0 auto;
+  min-height: 100vh;
+  box-shadow: 0 0 0 1px var(--ac-color-neutral-stroke-subtle);
+}
+
+html[data-surface="desktop"] .settings-section--surface {
+  display: none;
+}
+
+.tenant-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--ac-space-8);
+  padding: var(--ac-space-8) var(--ac-space-16);
+  background-color: var(--ac-color-neutral-background-2, var(--ac-color-neutral-background-1));
+  border-bottom: 1px solid var(--ac-color-neutral-stroke-subtle);
+}
+
+.tenant-bar__label {
+  font-size: var(--ac-font-size-200);
+  font-weight: var(--ac-font-weight-semibold);
+}
+
+.tenant-bar__select {
+  min-width: 0;
+}
+
+.tenant-bar__status {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--ac-font-size-200);
+  color: var(--ac-color-neutral-foreground-2, inherit);
+}
+
+.employee-task-form__grid,
+.environment-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--ac-space-8);
+}
+
+@media (max-width: 520px) {
+  .employee-task-form__grid,
+  .environment-form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

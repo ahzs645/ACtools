@@ -2,21 +2,22 @@ import {
   APP_PREFERENCES_STORAGE_KEY,
   DEFAULT_APP_PREFERENCES,
   type AppPreferences
-} from "../../shared/environments";
+} from "@ac-core/shared/environments";
+import { popupStorage } from "../platform";
 
 export async function loadAppPreferences(): Promise<AppPreferences> {
-  const stored = await chrome.storage.local.get(APP_PREFERENCES_STORAGE_KEY);
-  return sanitizePreferences(stored[APP_PREFERENCES_STORAGE_KEY] as Partial<AppPreferences> | undefined);
+  const stored = await popupStorage.local.get<Partial<AppPreferences>>(APP_PREFERENCES_STORAGE_KEY);
+  return sanitizePreferences(stored);
 }
 
 export async function saveAppPreferences(preferences: AppPreferences): Promise<AppPreferences> {
   const sanitized = sanitizePreferences(preferences);
-  await chrome.storage.local.set({ [APP_PREFERENCES_STORAGE_KEY]: sanitized });
+  await popupStorage.local.set(APP_PREFERENCES_STORAGE_KEY, sanitized);
   return sanitized;
 }
 
 export async function resetAppPreferences(): Promise<AppPreferences> {
-  await chrome.storage.local.remove(APP_PREFERENCES_STORAGE_KEY);
+  await popupStorage.local.remove(APP_PREFERENCES_STORAGE_KEY);
   return { ...DEFAULT_APP_PREFERENCES, employeeStatuses: [...DEFAULT_APP_PREFERENCES.employeeStatuses] };
 }
 

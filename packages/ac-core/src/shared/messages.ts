@@ -18,10 +18,15 @@ import type {
   EmployeeCopyPlanResult,
   EmployeeCopyResult,
   EmployeeCopyTargetRequest,
+  EmployeeCopyTargetResult,
   EmployeeDetail,
   EmployeeListRequest,
   EmployeeListResult,
   EmployeeStatusUpdate,
+  EmployeeTaskCloneExecuteRequest,
+  EmployeeTaskClonePreview,
+  EmployeeTaskCloneRequest,
+  EmployeeTaskCloneResult,
   EmployeeWriteResult
 } from "./employees";
 import type {
@@ -70,7 +75,21 @@ export interface CommandResult<T> {
   error?: string;
 }
 
-export type Surface = "sidepanel" | "popup";
+/** `desktop` is the Alayaduck app hosting the same panel; it has no extension surfaces. */
+export type Surface = "sidepanel" | "popup" | "desktop";
+
+/** One tenant the desktop app can sign into with its own cookie session. */
+export interface DesktopTenantSession {
+  origin: string;
+  name: string;
+  signedIn: boolean;
+  currentUserName?: string;
+}
+
+export interface DesktopSessionState {
+  activeOrigin: string | null;
+  tenants: DesktopTenantSession[];
+}
 
 export type RuntimeMessage =
   | {
@@ -202,6 +221,29 @@ export type RuntimeMessage =
       payload: Surface;
     }
   | {
+      type: "ac/popup/preview-employee-task-clone";
+      payload: EmployeeTaskCloneRequest;
+    }
+  | {
+      type: "ac/popup/clone-employee-task";
+      payload: EmployeeTaskCloneExecuteRequest;
+    }
+  | {
+      type: "ac/popup/desktop/get-session-state";
+    }
+  | {
+      type: "ac/popup/desktop/select-tenant";
+      payload: { origin: string };
+    }
+  | {
+      type: "ac/popup/desktop/sign-in";
+      payload: { origin: string };
+    }
+  | {
+      type: "ac/popup/desktop/sign-out";
+      payload: { origin: string };
+    }
+  | {
       type: "ac/content/get-status";
     }
   | {
@@ -270,6 +312,14 @@ export type RuntimeMessage =
   | {
       type: "ac/content/get-employee";
       payload: { employeeId: number };
+    }
+  | {
+      type: "ac/content/preview-employee-task-clone";
+      payload: EmployeeTaskCloneRequest;
+    }
+  | {
+      type: "ac/content/clone-employee-task";
+      payload: EmployeeTaskCloneExecuteRequest;
     };
 
 export type ContentCommandData =
@@ -296,6 +346,10 @@ export type ContentCommandData =
   | EmployeeConfiguredTenant[]
   | EmployeeCopyResult
   | EmployeeCopyPlanResult
+  | EmployeeCopyTargetResult
+  | EmployeeTaskClonePreview
+  | EmployeeTaskCloneResult
+  | DesktopSessionState
   | EnvironmentRegistry
   | EnvironmentHealth
   | void;

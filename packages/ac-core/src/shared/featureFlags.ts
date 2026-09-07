@@ -6,6 +6,8 @@
  * so the side panel and the background service worker agree on it: the panel
  * hides a disabled tool's entry point, and the background refuses its messages.
  */
+import type { KeyValueStore } from "../platform";
+
 export interface AcFeatureFlags {
   /**
    * "Structured client snapshot" — searches, ranks, and reads live client
@@ -57,18 +59,20 @@ function mergeFeatureFlags(candidate: unknown): AcFeatureFlags {
   return merged;
 }
 
-export async function loadFeatureFlags(): Promise<AcFeatureFlags> {
+export async function loadFeatureFlags(store: KeyValueStore): Promise<AcFeatureFlags> {
   try {
-    const stored = await chrome.storage.local.get(FEATURE_FLAG_STORAGE_KEY);
-    return mergeFeatureFlags(stored[FEATURE_FLAG_STORAGE_KEY]);
+    return mergeFeatureFlags(await store.get(FEATURE_FLAG_STORAGE_KEY));
   } catch {
     return { ...DEFAULT_FEATURE_FLAGS };
   }
 }
 
-export async function saveFeatureFlags(flags: AcFeatureFlags): Promise<AcFeatureFlags> {
+export async function saveFeatureFlags(
+  store: KeyValueStore,
+  flags: AcFeatureFlags
+): Promise<AcFeatureFlags> {
   const next = mergeFeatureFlags(flags);
-  await chrome.storage.local.set({ [FEATURE_FLAG_STORAGE_KEY]: next });
+  await store.set(FEATURE_FLAG_STORAGE_KEY, next);
   return next;
 }
 

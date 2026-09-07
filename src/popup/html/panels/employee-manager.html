@@ -69,6 +69,26 @@
       </button>
     </div>
 
+    <div class="employee-copy-form employee-task-form">
+      <div>
+        <h4 class="employee-copy-form__title">Onboarding tasks</h4>
+        <p class="employee-summary">
+          Clones this tenant's task template for the selected employee and assigns it to one of their groups. Preview resolves the template, employee, and group before anything is written.
+        </p>
+      </div>
+      <div class="employee-task-form__grid">
+        <input id="employee-task-template" class="input" type="number" min="1" step="1" inputmode="numeric" placeholder="Template task ID" aria-label="Template task ID" />
+        <select id="employee-task-group" class="input" aria-label="Owning group"></select>
+      </div>
+      <input id="employee-task-name" class="input" type="text" maxlength="200" placeholder="Task name" aria-label="Cloned task name" />
+      <input id="employee-task-ticket" class="input" type="text" minlength="5" maxlength="50" placeholder="Ticket number" aria-label="Onboarding task ticket number" />
+      <div class="environment-toolbar">
+        <button id="employee-task-preview" type="button" class="button button--secondary" disabled title="Resolve the template, employee, and group without writing anything">Preview</button>
+        <button id="employee-task-create" type="button" class="button button--primary" disabled title="Clone the template and assign it to the chosen group">Create task</button>
+      </div>
+      <p id="employee-task-result" class="employee-summary" hidden></p>
+    </div>
+
     <div class="employee-copy-form">
       <div>
         <h4 class="employee-copy-form__title">Copy to another tenant</h4>

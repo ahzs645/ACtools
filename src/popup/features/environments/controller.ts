@@ -1,11 +1,11 @@
 import { sendRuntimeMessage } from "../../../shared/chrome";
-import type { EmployeeApiCredentialStatus } from "../../../shared/employees";
+import type { EmployeeApiCredentialStatus } from "@ac-core/shared/employees";
 import {
   DEFAULT_SUPPORT_URL,
   type EnvironmentConfig,
   type EnvironmentHealth,
   type EnvironmentRegistry
-} from "../../../shared/environments";
+} from "@ac-core/shared/environments";
 import { showToast } from "../../ui/toasts";
 import { clearEmployeeCaches } from "../employees/cache";
 
@@ -14,6 +14,8 @@ interface EnvironmentElements {
   name: HTMLInputElement;
   origin: HTMLInputElement;
   supportUrl: HTMLInputElement;
+  taskTemplate: HTMLInputElement;
+  taskGroupPattern: HTMLInputElement;
   save: HTMLButtonElement;
   reset: HTMLButtonElement;
   exportButton: HTMLButtonElement;
@@ -61,6 +63,10 @@ export class EnvironmentManagerController {
   getSupportUrl(origin: string): string {
     return this.registry.environments.find((environment) => environment.origin === origin)?.supportUrl
       ?? DEFAULT_SUPPORT_URL;
+  }
+
+  getEnvironment(origin: string): EnvironmentConfig | undefined {
+    return this.registry.environments.find((environment) => environment.origin === origin);
   }
 
   getEnvironmentName(origin: string): string {
@@ -131,10 +137,14 @@ export class EnvironmentManagerController {
 
   private async saveEnvironment(): Promise<void> {
     const elements = this.elements();
-    const payload = {
+    const taskTemplateId = elements.taskTemplate.value.trim();
+    const taskGroupPattern = elements.taskGroupPattern.value.trim();
+    const payload: EnvironmentConfig = {
       name: elements.name.value,
       origin: elements.origin.value,
-      supportUrl: elements.supportUrl.value
+      supportUrl: elements.supportUrl.value,
+      ...(taskTemplateId ? { taskTemplateId: Number(taskTemplateId) } : {}),
+      ...(taskGroupPattern ? { taskGroupPattern } : {})
     };
     const response = await sendRuntimeMessage<EnvironmentRegistry>({
       type: "ac/popup/save-environment",
@@ -157,6 +167,8 @@ export class EnvironmentManagerController {
     elements.origin.value = environment.origin;
     elements.origin.readOnly = true;
     elements.supportUrl.value = environment.supportUrl;
+    elements.taskTemplate.value = environment.taskTemplateId ? String(environment.taskTemplateId) : "";
+    elements.taskGroupPattern.value = environment.taskGroupPattern ?? "";
     elements.name.focus();
   }
 
@@ -166,6 +178,8 @@ export class EnvironmentManagerController {
     elements.origin.value = "";
     elements.origin.readOnly = false;
     elements.supportUrl.value = DEFAULT_SUPPORT_URL;
+    elements.taskTemplate.value = "";
+    elements.taskGroupPattern.value = "";
   }
 
   private async deleteEnvironment(environment: EnvironmentConfig): Promise<void> {
@@ -343,6 +357,8 @@ export class EnvironmentManagerController {
       name: required("#environment-name"),
       origin: required("#environment-origin"),
       supportUrl: required("#environment-support-url"),
+      taskTemplate: required("#environment-task-template"),
+      taskGroupPattern: required("#environment-task-group-pattern"),
       save: required("#environment-save"),
       reset: required("#environment-reset"),
       exportButton: required("#environment-export"),

@@ -1,4 +1,4 @@
-import { formatError } from "../../shared/errors";
+import { formatError } from "@ac-core/shared/errors";
 import { showToast } from "./toasts";
 
 const DEFAULT_MESSAGE = "Ready.";

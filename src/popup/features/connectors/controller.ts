@@ -11,14 +11,14 @@ import type {
   ConnectorScenarioSaveResult,
   ConnectorScenarioSnapshot,
   ConnectorScenarioSource
-} from "../../../shared/connectorScenarios";
+} from "@ac-core/shared/connectorScenarios";
 import {
   CONNECTOR_ERROR_DIAGNOSTICS,
   auditConnectorBlueprint,
   extractConnectorBlueprint,
   validateConnectorBlueprint
-} from "../../../shared/connectorScenarios";
-import { formatError } from "../../../shared/errors";
+} from "@ac-core/shared/connectorScenarios";
+import { formatError } from "@ac-core/shared/errors";
 import { setDetailSubtitle } from "../../ui/detailHeader";
 import { showToast } from "../../ui/toasts";
 

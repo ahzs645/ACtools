@@ -1,4 +1,4 @@
-import type { AlayaCareClient, Department } from "../../services/AlayaCareClient";
+import type { AlayaCareClient, Department } from "@ac-core/session/AlayaCareClient";
 import { renderColumns, type ColumnContext } from "./columns";
 import { SHADOW_TEMPLATE } from "./shellTemplate";
 import { VisitTooltip } from "./VisitTooltip";

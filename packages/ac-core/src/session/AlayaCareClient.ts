@@ -1,13 +1,17 @@
-import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../../shared/messages";
+import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../shared/messages";
 import type {
   EmployeeDetail,
   EmployeeListRequest,
-  EmployeeListResult
-} from "../../shared/employees";
+  EmployeeListResult,
+  EmployeeTaskCloneExecuteRequest,
+  EmployeeTaskClonePreview,
+  EmployeeTaskCloneRequest,
+  EmployeeTaskCloneResult
+} from "../shared/employees";
 import {
   buildAlayaCareFormContextCatalog,
   type AlayaCareFormContextCatalogSnapshot
-} from "../../shared/formContextCatalog";
+} from "../shared/formContextCatalog";
 import {
   ALAYACARE_CLIENT_CHART_EXPORT_KIND,
   ALAYACARE_CLIENT_CHART_EXPORT_SCHEMA_VERSION,
@@ -18,7 +22,7 @@ import {
   type ClientChartSearchResponse,
   type ClientChartSearchResult,
   type ClientChartSection
-} from "../../shared/clientChart";
+} from "../shared/clientChart";
 import {
   ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
   isSyntheticClientName,
@@ -34,11 +38,11 @@ import {
   type ClientChartImportRequest,
   type ClientChartImportResult,
   type ClientChartImportStepResult
-} from "../../shared/clientChartImport";
+} from "../shared/clientChartImport";
 import type {
   ShiftServiceLocation,
   ShiftServiceLocationSearchResponse
-} from "../../shared/shiftLab";
+} from "../shared/shiftLab";
 import type {
   ConnectorBlueprint,
   ConnectorConnectionReference,
@@ -60,10 +64,11 @@ import type {
   ConnectorScenarioSource,
   ConnectorTemplateReference,
   ConnectorWebhookReference
-} from "../../shared/connectorScenarios";
-import { summarizeConnectorBlueprint, validateConnectorBlueprint } from "../../shared/connectorScenarios";
+} from "../shared/connectorScenarios";
+import { summarizeConnectorBlueprint, validateConnectorBlueprint } from "../shared/connectorScenarios";
 import { strToU8, zipSync } from "fflate";
-import { buildDailyRrule, getLocalDayUtcRange, minutesBetween } from "../utils/time";
+import { buildDailyRrule, getLocalDayUtcRange, minutesBetween } from "../shared/time";
+import type { SessionContext } from "../platform";
 
 interface StoreConfigResponse {
   currentBranch?: {
@@ -271,25 +276,56 @@ export interface ScheduleBundle {
   visits: VisitRecord[];
 }
 
+/**
+ * Signed-in-session pathway: AlayaCare's internal `/api/v1` and `/api/v2`
+ * endpoints, reached with the tenant's own cookies.
+ *
+ * The host decides what "the session" is: the page a content script runs on,
+ * or an Electron session the user signed into. Everything location- or
+ * transport-specific goes through `SessionContext`.
+ */
 export class AlayaCareClient {
   private userContextPromise: Promise<UserContext> | null = null;
 
+  constructor(private readonly context: SessionContext) {}
+
+  /** Tenant origin this client is bound to. */
+  get origin(): string {
+    return this.context.origin;
+  }
+
+  private get hostname(): string {
+    return new URL(this.context.origin).hostname;
+  }
+
+  private absolute(url: string): string {
+    return new URL(url, this.context.origin).toString();
+  }
+
+  private async saveFile(content: Uint8Array, type: string, filename: string): Promise<void> {
+    if (this.context.saveFile) {
+      await this.context.saveFile(content, type, filename);
+      return;
+    }
+    downloadBrowserFile(content, type, filename);
+  }
+
   async getStatus(): Promise<PageStatus> {
-    if (window.location.hostname.toLowerCase().startsWith("connector.")) {
+    if (this.hostname.toLowerCase().startsWith("connector.")) {
       try {
-        const teamMatch = /^\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+        const teamMatch = /^\/(\d+)(?:\/|$)/.exec(new URL(this.context.getHref()).pathname);
         const probeUrl = teamMatch
           ? `/api/v2/teams/${Number(teamMatch[1])}`
           : "/api/v2/users/me?cols%5B0%5D=id&cols%5B1%5D=name";
         await this.fetchConnectorJson<unknown>(probeUrl);
         return {
           ready: true,
-          location: window.location.origin
+          location: this.context.origin
         };
       } catch {
         return {
           ready: false,
-          location: window.location.origin,
+          location: this.context.origin,
           reason: "Connector is open, but the current browser session could not be verified."
         };
       }
@@ -303,14 +339,14 @@ export class AlayaCareClient {
 
       return {
         ready: true,
-        location: window.location.origin,
+        location: this.context.origin,
         currentUserId: config.current_user?.id,
         currentUserName: fullName || undefined
       };
     } catch {
       return {
         ready: false,
-        location: window.location.origin,
+        location: this.context.origin,
         reason: "This page does not look like an authenticated AlayaCare session."
       };
     }
@@ -378,6 +414,98 @@ export class AlayaCareClient {
     );
   }
 
+  /**
+   * Dry run for `cloneEmployeeTask`: resolves the template task, the employee,
+   * and the owning group without writing anything, so the operator can check
+   * all three before the clone is created.
+   */
+  async previewEmployeeTaskClone(request: EmployeeTaskCloneRequest): Promise<EmployeeTaskClonePreview> {
+    const { templateTaskId, employeeId, groupId } = validateTaskCloneRequest(request);
+    const [template, employee] = await Promise.all([
+      this.fetchJson<Record<string, unknown>>(`/api/v2/tasks/tasks/${templateTaskId}`),
+      this.getEmployeeDetail(employeeId)
+    ]);
+    const templateName = readNonEmptyString(template.name) ?? readNonEmptyString(template.title);
+    if (!templateName) {
+      throw new Error(`Task #${templateTaskId} exists but has no name; refusing to clone it.`);
+    }
+    const group = (employee.groups ?? []).find((item) => item.id === groupId);
+    if (!group) {
+      throw new Error(
+        `Group #${groupId} is not one of employee #${employeeId}'s groups; the task must be owned by the employee's own team.`
+      );
+    }
+    const employeeName = [
+      employee.demographics?.first_name ?? employee.first_name,
+      employee.demographics?.last_name ?? employee.last_name
+    ].filter(Boolean).join(" ") || `Employee #${employee.id}`;
+    return {
+      template: {
+        id: templateTaskId,
+        name: templateName,
+        status: readNonEmptyString(template.status)
+      },
+      employee: { id: employee.id, name: employeeName },
+      group: { id: group.id, name: group.name?.trim() || `#${group.id}` },
+      proposedName: request.name.trim()
+    };
+  }
+
+  /**
+   * Clones the tenant's onboarding task template for an employee and assigns
+   * the copy to the employee's group, in the employee's context.
+   *
+   * Two writes, mirroring the calls Alayaduck made: `POST /api/v2/tasks/tasks`
+   * with `{ task_id, name }` creates the copy, then `PATCH /api/v2/tasks/tasks/{id}`
+   * sets `assigned_to_group` and the `api.users.employee` context. The preview
+   * runs first so a bad template, employee, or group stops before the POST.
+   */
+  async cloneEmployeeTask(request: EmployeeTaskCloneExecuteRequest): Promise<EmployeeTaskCloneResult> {
+    if (!request.confirmed) {
+      throw new Error("Confirm the onboarding task clone before creating it.");
+    }
+    const ticket = request.ticket.trim();
+    if (ticket.length < 5) {
+      throw new Error("Enter a ticket number or change reference with at least 5 characters.");
+    }
+    const preview = await this.previewEmployeeTaskClone(request);
+    const name = preview.proposedName;
+
+    const createResponse = await this.context.fetch(this.absolute("/api/v2/tasks/tasks"), {
+      method: "POST",
+      credentials: "include",
+      headers: authenticatedJsonWriteHeaders(),
+      body: JSON.stringify({ task_id: preview.template.id, name })
+    });
+    const created = (await parseResponseBody(createResponse)) as Record<string, unknown> | undefined;
+    if (!createResponse.ok) {
+      throw new Error(
+        `Cloning task #${preview.template.id} failed (${createResponse.status}): ${describeBody(created)}`
+      );
+    }
+    const taskId = readPositiveInteger(created?.task_id) ?? readPositiveInteger(created?.id);
+    if (!taskId) {
+      throw new Error("AlayaCare cloned the task but returned no task ID; check the tenant before retrying.");
+    }
+
+    const assignResponse = await this.context.fetch(this.absolute(`/api/v2/tasks/tasks/${taskId}`), {
+      method: "PATCH",
+      credentials: "include",
+      headers: authenticatedJsonWriteHeaders(),
+      body: JSON.stringify({
+        assigned_to_group: { id: preview.group.id },
+        contexts: [{ type: "api.users.employee", primary_id: String(preview.employee.id) }]
+      })
+    });
+    if (!assignResponse.ok) {
+      const body = await parseResponseBody(assignResponse);
+      throw new Error(
+        `Task #${taskId} was created but assigning it to ${preview.group.name} failed (${assignResponse.status}): ${describeBody(body)}. Ticket ${ticket}.`
+      );
+    }
+    return { taskId, name, cloneStatus: createResponse.status, assignStatus: assignResponse.status };
+  }
+
   async exportFormContextCatalog(): Promise<AlayaCareFormContextCatalogSnapshot> {
     const [contexts, fields, profileAttributes, configuration, countries] = await Promise.all([
       this.fetchJson<unknown>("/api/v1/agency/form-context/contexts"),
@@ -390,7 +518,7 @@ export class AlayaCareClient {
     ]);
 
     return buildAlayaCareFormContextCatalog({
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       contexts,
       fields,
       profileAttributes,
@@ -546,14 +674,14 @@ export class AlayaCareClient {
     const requestedId = readPositiveInteger(requestedClientId);
     const route = requestedId
       ? { clientId: requestedId, routeId: requestedId.toString(36) }
-      : readActiveClientRoute(window.location.hash);
+      : readActiveClientRoute(new URL(this.context.getHref()).hash);
     if (!route) {
       throw new Error("Open a client chart or select a synthetic UAT client from search first.");
     }
 
     const sourceUrl = requestedId
-      ? `${window.location.origin}/#/clients/${route.routeId}/overview`
-      : window.location.href;
+      ? `${this.context.origin}/#/clients/${route.routeId}/overview`
+      : this.context.getHref();
 
     const overviewSource = `/api/v1/patients/${route.clientId}`;
     const overview = await this.fetchJson<ClientChartOverviewRecord>(overviewSource);
@@ -808,7 +936,7 @@ export class AlayaCareClient {
       kind: ALAYACARE_CLIENT_CHART_EXPORT_KIND,
       schemaVersion: ALAYACARE_CLIENT_CHART_EXPORT_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       sourceUrl,
       client: {
         routeId: route.routeId,
@@ -856,7 +984,7 @@ export class AlayaCareClient {
     }
 
     const sourceOrigin = new URL(request.sourceTenantOrigin).origin;
-    if (sourceOrigin !== window.location.origin) {
+    if (sourceOrigin !== this.context.origin) {
       throw new Error(
         "The client-chart JSON must be imported into the same UAT tenant it was exported from."
       );
@@ -920,7 +1048,7 @@ export class AlayaCareClient {
     }
 
     const createSource = "/api/v1/patients/";
-    const createResponse = await fetch(createSource, {
+    const createResponse = await this.context.fetch(this.absolute(createSource), {
       method: "POST",
       credentials: "include",
       headers: {
@@ -997,7 +1125,7 @@ export class AlayaCareClient {
     return {
       schemaVersion: ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
       importedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       sourceClient: {
         id: request.sourceClientId,
         fullName: request.sourceClientName
@@ -1009,7 +1137,7 @@ export class AlayaCareClient {
         birthday: request.birthday,
         ...(email ? { email } : {}),
         ...(phoneMain ? { phoneMain } : {}),
-        url: `${window.location.origin}/#/clients/${routeId}/overview`,
+        url: `${this.context.origin}/#/clients/${routeId}/overview`,
         destinationGroups: selectedGroups as ClientChartDestinationGroup[],
         ...(selectedCostCentre ? { costCentre: selectedCostCentre } : {})
       },
@@ -1087,7 +1215,7 @@ export class AlayaCareClient {
       throw new Error("No enabled client groups were returned for this UAT tenant.");
     }
     return {
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       groups,
       costCentres,
       sources: {
@@ -1132,7 +1260,7 @@ export class AlayaCareClient {
       const label = readNonEmptyString(item.label);
       if (!accountId || !branchId || !label) return [];
       return [{
-        tenantOrigin: window.location.origin,
+        tenantOrigin: this.context.origin,
         accountId,
         staffingId: staffingByAccount.get(accountId),
         branchId,
@@ -1143,7 +1271,7 @@ export class AlayaCareClient {
 
     return {
       query: normalizedQuery,
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       items,
       sources: [accountSource, staffingSource]
     };
@@ -1199,8 +1327,8 @@ export class AlayaCareClient {
     return {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
-      sourceUrl: window.location.href,
+      tenantOrigin: this.context.origin,
+      sourceUrl: this.context.getHref(),
       scenarioId: route.scenarioId,
       teamId: route.teamId,
       source,
@@ -1224,8 +1352,8 @@ export class AlayaCareClient {
     return {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
-      sourceUrl: window.location.href,
+      tenantOrigin: this.context.origin,
+      sourceUrl: this.context.getHref(),
       scenarioId: draft.scenarioId,
       teamId: draft.teamId,
       scenario: draft.scenario,
@@ -1271,7 +1399,7 @@ export class AlayaCareClient {
     files["manifest.json"] = jsonBytes({
       schemaVersion: 1,
       exportedAt,
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       teamId: list.teamId,
       teamName: list.teamName,
       scenarioCount: downloaded.length,
@@ -1281,7 +1409,7 @@ export class AlayaCareClient {
     });
 
     const filename = `connector-team-${list.teamId}-scenarios-${exportedAt.slice(0, 10)}.zip`;
-    downloadBrowserFile(zipSync(files, { level: 6 }), "application/zip", filename);
+    await this.saveFile(zipSync(files, { level: 6 }), "application/zip", filename);
     return {
       filename,
       scenarioCount: downloaded.length,
@@ -1313,7 +1441,7 @@ export class AlayaCareClient {
     return {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       teamId: context.teamId,
       organizationId: context.organizationId,
       templates: readRecordArray(templateResponse.templatesPublic).map(toTemplateReference),
@@ -1352,12 +1480,12 @@ export class AlayaCareClient {
     return {
       schemaVersion: 1,
       checkedAt: new Date().toISOString(),
-      tenantOrigin: window.location.origin,
+      tenantOrigin: this.context.origin,
       teamId: context.teamId,
       scenario,
       incompleteExecutionCount: scenario.allDlqCount ?? scenario.dlqCount ?? dlqs.length,
       runs,
-      historyUrl: `${window.location.origin}/${context.teamId}/scenarios/${scenarioId}/logs?showCheckRuns=true&showChangeLog=true`
+      historyUrl: `${this.context.origin}/${context.teamId}/scenarios/${scenarioId}/logs?showCheckRuns=true&showChangeLog=true`
     };
   }
 
@@ -1400,7 +1528,7 @@ export class AlayaCareClient {
       rrule: buildDailyRrule(draft.date, draft.startTime, draft.endTime)
     };
 
-    const response = await fetch(uri, {
+    const response = await this.context.fetch(this.absolute(uri), {
       method: "POST",
       credentials: "include",
       headers: {
@@ -1455,14 +1583,14 @@ export class AlayaCareClient {
   }
 
   private assertUatAccess(confirmed: boolean, confirmationMessage: string): void {
-    if (!window.location.hostname.toLowerCase().includes(".uat.alayacare.")) {
+    if (!this.hostname.toLowerCase().includes(".uat.alayacare.")) {
       throw new Error("This utility is currently limited to AlayaCare UAT tenants.");
     }
     if (!confirmed) throw new Error(confirmationMessage);
   }
 
   private async fetchJson<T>(url: string): Promise<T> {
-    const response = await fetch(url, { credentials: "include" });
+    const response = await this.context.fetch(this.absolute(url), { credentials: "include" });
 
     if (!response.ok) {
       throw new Error(`Request failed (${response.status}) for ${url}`);
@@ -1477,10 +1605,10 @@ export class AlayaCareClient {
   ): Promise<ClientChartSection> {
     const controller = timeoutMs ? new AbortController() : undefined;
     const timeout = controller
-      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      ? setTimeout(() => controller.abort(), timeoutMs)
       : undefined;
     try {
-      const response = await fetch(source, {
+      const response = await this.context.fetch(this.absolute(source), {
         credentials: "include",
         headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
         signal: controller?.signal
@@ -1507,7 +1635,7 @@ export class AlayaCareClient {
             : String(error)
       };
     } finally {
-      if (timeout !== undefined) window.clearTimeout(timeout);
+      if (timeout !== undefined) clearTimeout(timeout);
     }
   }
 
@@ -1550,10 +1678,10 @@ export class AlayaCareClient {
       const pageSource = setQueryPage(source, page);
       const controller = timeoutMs ? new AbortController() : undefined;
       const timeout = controller
-        ? window.setTimeout(() => controller.abort(), timeoutMs)
+        ? setTimeout(() => controller.abort(), timeoutMs)
         : undefined;
       try {
-        const response = await fetch(pageSource, {
+        const response = await this.context.fetch(this.absolute(pageSource), {
           credentials: "include",
           headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
           signal: controller?.signal
@@ -1581,7 +1709,7 @@ export class AlayaCareClient {
         );
         break;
       } finally {
-        if (timeout !== undefined) window.clearTimeout(timeout);
+        if (timeout !== undefined) clearTimeout(timeout);
       }
     }
 
@@ -1611,7 +1739,7 @@ export class AlayaCareClient {
 
   private async fetchClientChartLegacyTables(source: string): Promise<ClientChartSection> {
     try {
-      const response = await fetch(source, {
+      const response = await this.context.fetch(this.absolute(source), {
         credentials: "include",
         headers: { Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" }
       });
@@ -1669,8 +1797,8 @@ export class AlayaCareClient {
           );
           const guid = readPositiveInteger(target.guid);
           if (guid) {
-            await fetch(
-              `/clinical/default/details/doc/${type}/guid/${guid}/id/${clientId.toString(36)}`,
+            await this.context.fetch(
+              this.absolute(`/clinical/default/details/doc/${type}/guid/${guid}/id/${clientId.toString(36)}`),
               {
                 credentials: "include",
                 headers: {
@@ -1681,7 +1809,7 @@ export class AlayaCareClient {
             );
           }
         }
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
+        await new Promise<void>((resolve) => setTimeout(resolve, 400));
       }
       const documentId = readNonEmptyString(targetDocument?.id);
       const schemaId = readNonEmptyString(targetDocument?.schema_id);
@@ -1693,7 +1821,7 @@ export class AlayaCareClient {
       }
 
       const source = `/api/v1/clinical/documents/${encodeURIComponent(documentId)}`;
-      const response = await fetch(source, {
+      const response = await this.context.fetch(this.absolute(source), {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -1757,7 +1885,7 @@ export class AlayaCareClient {
         continue;
       }
       try {
-        const response = await fetch(source, {
+        const response = await this.context.fetch(this.absolute(source), {
           method: "POST",
           credentials: "include",
           headers: authenticatedJsonWriteHeaders(),
@@ -1808,7 +1936,7 @@ export class AlayaCareClient {
         continue;
       }
       try {
-        const response = await fetch(source, {
+        const response = await this.context.fetch(this.absolute(source), {
           method: "POST",
           credentials: "include",
           headers: authenticatedJsonWriteHeaders(),
@@ -1840,7 +1968,7 @@ export class AlayaCareClient {
       headers.set("Content-Type", "application/json");
     }
 
-    const response = await fetch(url, {
+    const response = await this.context.fetch(this.absolute(url), {
       ...init,
       credentials: "include",
       headers
@@ -1856,12 +1984,12 @@ export class AlayaCareClient {
   }
 
   private getConnectorTeamId(): number {
-    const hostname = window.location.hostname.toLowerCase();
+    const hostname = this.hostname.toLowerCase();
     if (!hostname.startsWith("connector.") || !hostname.includes(".alayacare.")) {
       throw new Error("Open connector.alayacare.ca before using Connector Utilities.");
     }
 
-    const match = /^\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+    const match = /^\/(\d+)(?:\/|$)/.exec(new URL(this.context.getHref()).pathname);
     if (!match) {
       throw new Error("Open a team page in Connector before using team utilities.");
     }
@@ -1870,7 +1998,7 @@ export class AlayaCareClient {
   }
 
   private getActiveConnectorScenarioId(): number | undefined {
-    const match = /^\/\d+\/scenarios\/(\d+)(?:\/|$)/.exec(window.location.pathname);
+    const match = /^\/\d+\/scenarios\/(\d+)(?:\/|$)/.exec(new URL(this.context.getHref()).pathname);
     return match ? Number(match[1]) : undefined;
   }
 
@@ -1976,6 +2104,28 @@ export class AlayaCareClient {
   }
 }
 
+function validateTaskCloneRequest(
+  request: EmployeeTaskCloneRequest
+): { templateTaskId: number; employeeId: number; groupId: number } {
+  const templateTaskId = readPositiveInteger(request.templateTaskId);
+  const employeeId = readPositiveInteger(request.employeeId);
+  const groupId = readPositiveInteger(request.groupId);
+  if (!templateTaskId) throw new Error("Enter the template task ID to clone.");
+  if (!employeeId) throw new Error("Select an employee first.");
+  if (!groupId) throw new Error("Choose the employee group that will own the task.");
+  if (!request.name.trim()) throw new Error("Enter a name for the cloned task.");
+  return { templateTaskId, employeeId, groupId };
+}
+
+function describeBody(body: unknown): string {
+  if (body === undefined || body === null || body === "") return "no response body";
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  return text.slice(0, 300);
+}
+
+/** Base for parsing relative paths whose origin is irrelevant to the result. */
+const PARSE_ONLY_BASE = "https://parse-only.invalid";
+
 function compareEmployees(
   left: { first_name?: string; last_name?: string },
   right: { first_name?: string; last_name?: string }
@@ -2058,7 +2208,7 @@ function readClientChartPagination(
   if (!Array.isArray(record.items)) return null;
 
   const items = readItems(value);
-  const sourceUrl = new URL(source, window.location.origin);
+  const sourceUrl = new URL(source, PARSE_ONLY_BASE);
   const requestedPageSize = readPositiveInteger(sourceUrl.searchParams.get("count"));
   const pageSize =
     readPositiveInteger(record.items_per_page) ??
@@ -2083,7 +2233,7 @@ function readClientChartPagination(
 }
 
 function setQueryPage(source: string, page: number): string {
-  const url = new URL(source, window.location.origin);
+  const url = new URL(source, PARSE_ONLY_BASE);
   url.searchParams.set("page", String(page));
   return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -2099,6 +2249,13 @@ function mergeClientChartPageItems(
 }
 
 function readHtmlTables(html: string): ClientChartHtmlTable[] {
+  if (typeof DOMParser !== "undefined") {
+    return readHtmlTablesWithDom(html);
+  }
+  return readHtmlTablesWithRegex(html);
+}
+
+function readHtmlTablesWithDom(html: string): ClientChartHtmlTable[] {
   const document = new DOMParser().parseFromString(html, "text/html");
   return Array.from(document.querySelectorAll("table")).flatMap((table) => {
     const headerCells = Array.from(table.querySelectorAll("thead th"));
@@ -2128,6 +2285,52 @@ function readHtmlTables(html: string): ClientChartHtmlTable[] {
       }
     ];
   });
+}
+
+/**
+ * Hosts without a DOM (the desktop app's main process) get a tag-level parse.
+ * It reads header and body cells and the nearest preceding heading, which is
+ * all the chart export needs; nested tables are flattened into their parent.
+ */
+function readHtmlTablesWithRegex(html: string): ClientChartHtmlTable[] {
+  const tables: ClientChartHtmlTable[] = [];
+  const tablePattern = /<table\b[^>]*>([\s\S]*?)<\/table>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tablePattern.exec(html))) {
+    const body = match[1];
+    const rows = Array.from(body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((row) =>
+      Array.from(row[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)).map((cell) => ({
+        header: cell[1].toLowerCase() === "th",
+        text: normalizeTableText(stripHtmlTags(cell[2]))
+      }))
+    );
+    const headerRow = rows.find((row) => row.length > 0 && row.every((cell) => cell.header));
+    const columns = headerRow ? headerRow.map((cell) => cell.text) : [];
+    const dataRows = rows
+      .filter((row) => row !== headerRow && row.some((cell) => !cell.header))
+      .map((row) => row.map((cell) => cell.text))
+      .filter((row) => row.some(Boolean));
+    if (columns.length === 0 && dataRows.length === 0) continue;
+
+    const preceding = html.slice(Math.max(0, match.index - 2000), match.index);
+    const headingMatch = Array.from(
+      preceding.matchAll(/<(h[1-6]|legend)\b[^>]*>([\s\S]*?)<\/\1>/gi)
+    ).pop();
+    const heading = headingMatch ? normalizeTableText(stripHtmlTags(headingMatch[2])) : "";
+    tables.push({ ...(heading ? { title: heading } : {}), columns, rows: dataRows });
+  }
+  return tables;
+}
+
+function stripHtmlTags(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 function findPrecedingTableHeading(table: HTMLTableElement): string | undefined {

@@ -19,6 +19,11 @@
     <input id="environment-name" class="input" type="text" placeholder="Friendly name, e.g. Northern Health UAT" />
     <input id="environment-origin" class="input" type="url" placeholder="https://tenant.uat.alayacare.ca" />
     <input id="environment-support-url" class="input" type="url" value="https://healthbc.service-now.com/" placeholder="ServiceNow support URL" />
+    <div class="environment-form__row">
+      <input id="environment-task-template" class="input" type="number" min="1" step="1" inputmode="numeric" placeholder="Onboarding task template ID (optional)" aria-label="Onboarding task template ID" />
+      <input id="environment-task-group-pattern" class="input" type="text" autocomplete="off" placeholder="Owning group regex, e.g. ^Team_ (optional)" aria-label="Onboarding group pattern" />
+    </div>
+    <p class="employee-summary">The template is the AlayaCare task cloned by <strong>Employee Manager → Onboarding tasks</strong>; the pattern preselects which of the employee's groups owns the copy.</p>
     <div class="environment-toolbar">
       <button id="environment-save" type="button" class="button button--primary" title="Save this environment">Save</button>
       <button id="environment-reset" type="button" class="button button--subtle" title="Clear the environment form">Clear</button>
