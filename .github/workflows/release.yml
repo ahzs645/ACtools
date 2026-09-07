@@ -9,8 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  extension:
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -47,7 +49,7 @@ jobs:
           generate_release_notes: true
           files: releases/ac-tools-*.zip
           body: |
-            ## Install
+            ## Chrome extension
 
             1. Download `ac-tools-${{ github.ref_name }}.zip` from the assets below.
             2. Unzip it somewhere stable (the folder must keep existing for the extension to keep working).
@@ -57,3 +59,43 @@ jobs:
             6. The AC Tools side panel is now available from the puzzle-piece menu.
 
             To update later, download the next release zip, replace the folder contents, and click the reload arrow on the extension card in `chrome://extensions`.
+
+            ## Desktop app
+
+            The same tools outside the browser. Download `ac-tools-desktop-*-setup.exe` (Windows),
+            `ac-tools-desktop-*.dmg` (macOS), or `ac-tools-desktop-*.AppImage` (Linux). See
+            `desktop/README.md` for first-run steps.
+
+  desktop:
+    needs: extension
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: package:win
+          - os: macos-latest
+            script: package:mac
+          - os: ubuntu-latest
+            script: package:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build installer
+        run: npm run ${{ matrix.script }} --workspace desktop
+
+      - name: Attach installer to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.AppImage

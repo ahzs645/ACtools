@@ -1,6 +1,6 @@
 # AC Tools
 
-A Manifest V3 Chrome extension that turns one-off console scripts for AlayaCare scheduling into a maintainable side-panel toolkit.
+A Manifest V3 Chrome extension that turns one-off console scripts for AlayaCare scheduling into a maintainable side-panel toolkit. The same panel and services also ship as a [desktop app](desktop/README.md) for use outside the browser.
 
 ## Install
 
@@ -14,6 +14,14 @@ You do not need to clone this repo or install Node. Grab the latest release zip 
 6. AC Tools is now reachable from the extensions toolbar. Click the icon to open the side panel on any AlayaCare tab.
 
 To update later, download the next release zip, replace the folder contents, and hit the reload icon on the AC Tools card in `chrome://extensions`.
+
+### Desktop app
+
+If Developer mode is not an option, or you want the tools outside Chrome, install the desktop app
+from the same release: `ac-tools-desktop-<version>-setup.exe` (Windows), `.dmg` (macOS), or
+`.AppImage` (Linux). It runs the identical panel with a signed-in tenant session and the API-key
+pathway; see [desktop/README.md](desktop/README.md) for first-run steps and what it cannot do (the
+Day View overlay and the page button need an AlayaCare tab).
 
 ## Current features
 
@@ -165,7 +173,7 @@ Everything below is for people working on the extension itself. End users should
 
 ```text
 public/manifest.json           Chrome extension manifest
-packages/ac-core/              Host-agnostic core shared with the Alayaduck desktop app (see its README)
+packages/ac-core/              Host-agnostic core shared by the extension and the desktop app (see its README)
 packages/ac-core/src/shared/   Typed messages, employee/environment/chart/connector types and helpers
 packages/ac-core/src/external/ API-key pathway: credential store, environment registry, employee service
 packages/ac-core/src/session/  Session pathway: AlayaCareClient and the ac/content/* dispatcher
@@ -179,12 +187,13 @@ src/popup/                     Shared drawer UI entry point used by the side pan
 src/shared/chrome.ts           Extension-only messaging helpers
 scripts/build.mjs              Build orchestration for popup/background/content
 scripts/package.mjs            Version sync, build, and release zip
+desktop/                       Electron host (npm workspace): renders sidepanel.html, runs ac-core in main
 ```
 
-The side panel is also the UI of the [Alayaduck desktop app](https://github.com/ahzs645/Alayaduck), which
-vendors this repository as a git submodule, renders `sidepanel.html` in an Electron window, and provides
+The desktop app renders the same `sidepanel.html` in an Electron window and provides
 `window.acBridge` instead of `chrome.*`. Keep `packages/ac-core` free of Chrome, DOM, and Electron
-references, and keep new popup storage going through `src/popup/platform.ts`.
+references, and keep new popup storage going through `src/popup/platform.ts`, and both hosts stay in
+step. See [desktop/README.md](desktop/README.md).
 
 ### Development
 
@@ -192,7 +201,9 @@ references, and keep new popup storage going through `src/popup/platform.ts`.
 npm install
 npm run dev        # watch build into dist/
 npm run build      # one-off production build
-npm run typecheck  # extension + packages/ac-core
+npm run typecheck  # extension + packages/ac-core + desktop
+npm run desktop:dev      # the Electron app with hot reload (see desktop/README.md)
+npm run desktop:package  # installers into desktop/release
 ```
 
 While developing, load the `dist/` folder into Chrome via `chrome://extensions` → Developer mode → Load unpacked. The watch build will keep `dist/` in sync; click the reload icon on the extension card after saving.
@@ -208,7 +219,7 @@ npm version patch        # or minor / major — bumps package.json and creates a
 git push --follow-tags
 ```
 
-The workflow verifies the tag matches `package.json`, runs typecheck, runs `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to the release. End users then follow the [Install](#install) instructions above.
+The workflow verifies the tag matches `package.json`, runs typecheck, runs `npm run package`, and uploads `releases/ac-tools-vX.Y.Z.zip` to the release. A second job then builds the desktop installers on Windows, macOS, and Linux and attaches them to the same release. End users then follow the [Install](#install) instructions above.
 
 To produce a release zip locally without publishing:
 

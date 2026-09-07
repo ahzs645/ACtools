@@ -1,7 +1,7 @@
 # @ac-tools/core
 
-Host-agnostic TypeScript shared by the AC Tools Chrome extension (this repository) and the
-Alayaduck desktop app (`ahzs645/Alayaduck`, which vendors this repository as a git submodule).
+Host-agnostic TypeScript shared by the AC Tools Chrome extension and the AC Tools desktop app
+(`desktop/`), both built from this repository.
 
 Two pathways, one code base:
 

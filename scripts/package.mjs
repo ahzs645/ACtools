@@ -19,6 +19,7 @@ async function main() {
   console.log(`Packaging AC Tools v${version}`);
 
   await syncManifestVersion(version);
+  await syncDesktopVersion(version);
 
   console.log("Running build\u2026");
   await runCommand("node", ["scripts/build.mjs"], { cwd: rootDir });
@@ -46,6 +47,19 @@ async function main() {
   const stats = await stat(zipPath);
   const sizeKb = (stats.size / 1024).toFixed(1);
   console.log(`Wrote releases/${zipName} (${sizeKb} KB)`);
+}
+
+async function syncDesktopVersion(version) {
+  const desktopPkgPath = resolve(rootDir, "desktop/package.json");
+  const desktopPkg = JSON.parse(await readFile(desktopPkgPath, "utf8"));
+
+  if (desktopPkg.version === version) {
+    return;
+  }
+
+  desktopPkg.version = version;
+  await writeFile(desktopPkgPath, `${JSON.stringify(desktopPkg, null, 2)}\n`, "utf8");
+  console.log(`Updated desktop/package.json to version ${version}`);
 }
 
 async function syncManifestVersion(version) {

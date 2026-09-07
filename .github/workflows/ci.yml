@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    env:
+      # The extension checks do not run Electron; skip its 100 MB download.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check (extension, core, desktop)
+        run: npm run typecheck
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Shift Lab tests
+        run: npm run test:shift-lab
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build desktop app
+        run: npm run desktop:build
+
+      - name: Headless smoke test
+        run: xvfb-run -a -s "-screen 0 1280x900x24" npm run desktop:smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-smoke-screenshot
+          path: desktop/smoke.png
+          if-no-files-found: ignore
