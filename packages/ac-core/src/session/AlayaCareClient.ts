@@ -924,6 +924,26 @@ export class AlayaCareClient {
       };
     }
 
+    const clientFormItems = readItems(sections.clientForms.data);
+    if (clientFormItems.length > 0) {
+      const details = await Promise.all(
+        clientFormItems.flatMap((item) => {
+          const submissionId = readPositiveInteger(item.id);
+          return submissionId
+            ? [this.fetchClientChartSection(`/api/v1/tasks/forms20/submissions/${submissionId}`)]
+            : [];
+        })
+      );
+      sections.clientFormDetails = {
+        source: "/api/v1/tasks/forms20/submissions/{submissionId}",
+        ok: details.every((detail) => detail.ok),
+        data: details,
+        error: details.some((detail) => !detail.ok)
+          ? "One or more client-form detail requests failed."
+          : undefined
+      };
+    }
+
     const sectionValues = Object.values(sections);
     const successful = sectionValues.filter((section) => section.ok).length;
     const partial = sectionValues.filter(
@@ -1064,6 +1084,7 @@ export class AlayaCareClient {
         health_card: healthCard,
         gender: request.gender,
         groups: destinationGroupIds,
+        ...(request.profileData ?? {}),
         ...(email ? { email } : {}),
         ...(phoneMain ? { phone_main: phoneMain } : {}),
         ...(selectedCostCentre ? { cost_centre: Number(selectedCostCentre.code) } : {})
@@ -1111,17 +1132,76 @@ export class AlayaCareClient {
       steps.push(...(await this.importMedications(targetClientId, medications)));
     }
 
+    steps.push(
+      ...(await this.importSimpleRecords(
+        targetClientId,
+        "clientNotes",
+        `/api/v1/patients/clients/${targetClientId}/client-notes`,
+        request.clientNotesData,
+        (note) => ({
+          type: readNonEmptyString(note.type),
+          content: readNonEmptyString(note.content),
+          is_client_coordinator_note: note.is_client_coordinator_note === true
+        }),
+        (note) => Boolean(readNonEmptyString(note.type) && readNonEmptyString(note.content))
+      )),
+      ...(await this.importSimpleRecords(
+        targetClientId,
+        "careProviderNotes",
+        `/api/v1/patients/clients/${targetClientId}/care-provider-notes`,
+        request.careProviderNotesData,
+        (note) => ({
+          content: readNonEmptyString(note.content),
+          category_id: readPositiveInteger(note.category_id)
+        }),
+        (note) => Boolean(readNonEmptyString(note.content) && readPositiveInteger(note.category_id))
+      ))
+    );
+
+    const serviceImport = await this.importServices(targetClientId, request.servicesData);
+    steps.push(...serviceImport.steps);
+    steps.push(
+      ...(await this.importAuthorizations(
+        targetClientId,
+        request.authorizationsData,
+        serviceImport.idMap
+      )),
+      ...(await this.importRequiredCareSkills(targetClientId, request.requiredCareSkillsData)),
+      ...(await this.importCarePlans(targetClientId, request.carePlansData, serviceImport.idMap))
+    );
+
+    steps.push(
+      ...(await this.importClientForms(targetClientId, request.clientFormsData, serviceImport.idMap))
+    );
+
+    if ((request.sourceEventCount ?? 0) > 0) {
+      steps.push({
+        section: "events",
+        source: `/api/v1/logs/security/clients/${targetClientId}/events`,
+        ok: true,
+        skipped: true,
+        disposition: "regenerated",
+        error: `${request.sourceEventCount} source audit events were not forged; AlayaCare generated new audit events for this import.`
+      });
+    }
+
+    const targetStatus = readNonEmptyString(request.targetStatus)?.toLowerCase();
+    if (targetStatus && targetStatus !== "pending") {
+      steps.push(await this.importClientStatus(targetClientId, targetStatus));
+    }
+
     const routeId = targetClientId.toString(36);
-    const copiedSections = steps.flatMap((step) => {
-      if (step.ok && step.section === "medicalHistory") return ["medicalHistory" as const];
-      if (step.ok && step.section === "riskAssessment") return ["riskAssessment" as const];
-      if (step.ok && step.section === "progressNotes") return ["progressNotes" as const];
-      if (step.ok && step.section === "medications") return ["medications" as const];
-      return [];
-    });
+    const copiedSections = steps
+      .filter((step) => step.ok && step.disposition !== "regenerated")
+      .map((step) => step.section);
     const uniqueCopiedSections = [...new Set(copiedSections)];
-    const successful = steps.filter((step) => step.ok).length;
+    const successful = steps.filter(
+      (step) => step.ok && step.disposition !== "regenerated"
+    ).length;
     const skipped = steps.filter((step) => step.skipped).length;
+    const failed = steps.filter(
+      (step) => !step.ok && step.disposition !== "unavailable"
+    ).length;
     return {
       schemaVersion: ALAYACARE_CLIENT_CHART_IMPORT_SCHEMA_VERSION,
       importedAt: new Date().toISOString(),
@@ -1143,23 +1223,23 @@ export class AlayaCareClient {
       },
       steps,
       counts: {
-        requested: steps.length,
+        requested: steps.filter((step) => step.disposition !== "regenerated").length,
         successful,
         skipped,
-        failed: steps.length - successful
+        failed
       },
       scope: {
         syntheticUatOnly: true,
         copiedSections: uniqueCopiedSections,
+        regeneratedSections: [...new Set(steps
+          .filter((step) => step.disposition === "regenerated")
+          .map((step) => step.section))],
         omittedSections: [
-          "contacts",
-          "client notes and care-provider notes",
-          "services",
-          "care plans",
-          "forms",
-          "tasks",
-          "documents",
-          "attachments"
+          "attachment binaries",
+          "audit provenance",
+          ...(steps.some((step) => step.section === "clientForms" && step.disposition === "unavailable")
+            ? ["form answers absent from the source export"]
+            : [])
         ]
       }
     };
@@ -1960,6 +2040,328 @@ export class AlayaCareClient {
     return results;
   }
 
+  private async importSimpleRecords(
+    _clientId: number,
+    section: ClientChartImportStepResult["section"],
+    source: string,
+    records: Record<string, unknown>[] | undefined,
+    buildPayload: (record: Record<string, unknown>) => Record<string, unknown>,
+    isValid: (record: Record<string, unknown>) => boolean
+  ): Promise<ClientChartImportStepResult[]> {
+    const results: ClientChartImportStepResult[] = [];
+    for (const record of records ?? []) {
+      if (!isValid(record)) {
+        results.push({ section, source, ok: false, skipped: true, disposition: "unavailable", error: "The source record is missing required replay fields." });
+        continue;
+      }
+      results.push(await this.postImportRecord(section, source, buildPayload(record)));
+    }
+    return results;
+  }
+
+  private async postImportRecord(
+    section: ClientChartImportStepResult["section"],
+    source: string,
+    payload: Record<string, unknown>,
+    method: "POST" | "PUT" = "POST"
+  ): Promise<ClientChartImportStepResult> {
+    try {
+      const response = await fetch(source, {
+        method,
+        credentials: "include",
+        headers: authenticatedJsonWriteHeaders(),
+        body: JSON.stringify(payload)
+      });
+      const body = await parseResponseBody(response);
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+      }
+      return { section, source, ok: true, disposition: "copied", status: response.status };
+    } catch (error) {
+      return { section, source, ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private async importServices(
+    clientId: number,
+    services: Record<string, unknown>[] | undefined
+  ): Promise<{ steps: ClientChartImportStepResult[]; idMap: Map<number, number> }> {
+    const source = "/api/v1/scheduler/services";
+    const steps: ClientChartImportStepResult[] = [];
+    const idMap = new Map<number, number>();
+    for (const service of services ?? []) {
+      const sourceId = readPositiveInteger(service.id);
+      const serviceCodeId = readPositiveInteger(readRecord(service.service_code)?.id);
+      const name = readNonEmptyString(service.name);
+      if (!sourceId || !serviceCodeId || !name) {
+        steps.push({ section: "services", source, ok: false, skipped: true, disposition: "unavailable", error: "The source service is missing its ID, name, or service-code ID." });
+        continue;
+      }
+      const payload: Record<string, unknown> = {
+        client: { id: clientId },
+        name,
+        start_date: readNonEmptyString(service.start_date) ?? null,
+        projected_end_date: readNonEmptyString(service.projected_end_date) ?? null,
+        service_code: { id: serviceCodeId },
+        activity_codes: readRecordArray(service.activity_codes).flatMap((item) => {
+          const id = readPositiveInteger(item.id);
+          return id ? [{ id }] : [];
+        }),
+        reports: readRecordArray(service.reports).flatMap((item) => {
+          const id = readPositiveInteger(item.id);
+          return id ? [{ id }] : [];
+        }),
+        skills: readRecordArray(service.skills).flatMap((item) => {
+          const id = readPositiveInteger(item.id);
+          return id ? [{ id }] : [];
+        }),
+        form_context_fields: readRecord(service.form_context_fields) ?? {},
+        funding_methodology: readNonEmptyString(service.funding_methodology),
+        notes: readNonEmptyString(service.notes) ?? "",
+        is_address_overridden: false
+      };
+      try {
+        const response = await fetch(source, {
+          method: "POST",
+          credentials: "include",
+          headers: authenticatedJsonWriteHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const body = await parseResponseBody(response);
+        if (!response.ok) throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+        const createdId = readPositiveInteger(readRecord(body)?.id);
+        if (!createdId) throw new Error("AlayaCare created the service but did not return its ID.");
+        idMap.set(sourceId, createdId);
+        steps.push({ section: "services", source, ok: true, disposition: "copied", status: response.status });
+      } catch (error) {
+        steps.push({ section: "services", source, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { steps, idMap };
+  }
+
+  private async importAuthorizations(
+    clientId: number,
+    authorizations: Record<string, unknown>[] | undefined,
+    serviceIdMap: Map<number, number>
+  ): Promise<ClientChartImportStepResult[]> {
+    const source = "/api/v1/scheduler/authorizations";
+    const allowed = new Set([
+      "authorization_number", "bill_code_categories", "billcodes", "case_manager_email",
+      "case_manager_fax", "case_manager_name", "case_manager_phone", "custom_number_of_days",
+      "end_date", "member_number", "methodology", "notes", "payor_id", "payor_id_type",
+      "program_id", "rule_custom", "rule_daily", "rule_friday", "rule_monday", "rule_monthly",
+      "rule_period", "rule_saturday", "rule_sunday", "rule_thursday", "rule_tuesday",
+      "rule_type", "rule_wednesday", "rule_weekly", "start_date", "state_type_id"
+    ]);
+    const results: ClientChartImportStepResult[] = [];
+    for (const authorization of authorizations ?? []) {
+      const serviceIds = readRecordArray(authorization.services).flatMap((service) => {
+        const mapped = serviceIdMap.get(readPositiveInteger(service.id) ?? -1);
+        return mapped ? [mapped] : [];
+      });
+      if (serviceIds.length === 0 && readRecordArray(authorization.services).length > 0) {
+        results.push({ section: "authorizations", source, ok: false, skipped: true, disposition: "unavailable", error: "Its source service could not be recreated, so the authorization was not linked to the wrong service." });
+        continue;
+      }
+      const payload = pickImportFields(authorization, allowed);
+      payload.client_id = clientId;
+      payload.services = serviceIds;
+      results.push(await this.postImportRecord("authorizations", source, payload));
+    }
+    return results;
+  }
+
+  private async importRequiredCareSkills(
+    clientId: number,
+    skills: Record<string, unknown>[] | undefined
+  ): Promise<ClientChartImportStepResult[]> {
+    return this.importSimpleRecords(
+      clientId,
+      "requiredCareSkills",
+      "/api/v1/employees/employee_skills",
+      skills,
+      (skill) => ({
+        client_id: clientId,
+        skill_id: readPositiveInteger(skill.skill_id),
+        employee_id: readPositiveInteger(skill.employee_id),
+        start_at: readNonEmptyString(skill.start_at),
+        expiry_date: readNonEmptyString(skill.expiry_date) ?? null,
+        comments: typeof skill.comments === "string" ? skill.comments : null
+      }),
+      (skill) => Boolean(readPositiveInteger(skill.skill_id) && readPositiveInteger(skill.employee_id) && readNonEmptyString(skill.start_at))
+    );
+  }
+
+  private async importCarePlans(
+    clientId: number,
+    carePlans: Record<string, unknown>[] | undefined,
+    serviceIdMap: Map<number, number>
+  ): Promise<ClientChartImportStepResult[]> {
+    const results: ClientChartImportStepResult[] = [];
+    const collection = `/api/v1/clinical/client/${clientId}/careplans`;
+    for (const plan of carePlans ?? []) {
+      const name = readNonEmptyString(plan.name);
+      const startDate = readNonEmptyString(plan.start_date);
+      if (!name || !startDate) {
+        results.push({ section: "carePlans", source: collection, ok: false, skipped: true, disposition: "unavailable", error: "The care plan is missing its name or start date." });
+        continue;
+      }
+      try {
+        const carePlanPayload = {
+          name,
+          start_date: startDate,
+          end_date: readNonEmptyString(plan.end_date) ?? null,
+          careplan_type_id: readPositiveInteger(plan.careplan_type_id) ?? null,
+          department_id: readPositiveInteger(plan.department_id) ?? null
+        };
+        let importedName = name;
+        let response: Response;
+        let body: unknown;
+        for (let attempt = 0; ; attempt += 1) {
+          response = await fetch(collection, {
+            method: "POST",
+            credentials: "include",
+            headers: authenticatedJsonWriteHeaders(),
+            body: JSON.stringify({ ...carePlanPayload, name: importedName })
+          });
+          body = await parseResponseBody(response);
+          if (response.ok || !isCarePlanNameConflict(body) || attempt >= 9) break;
+          importedName = `${name} — Imported Copy${attempt === 0 ? "" : ` ${attempt + 1}`}`;
+        }
+        if (!response.ok) throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+        const carePlanId = readPositiveInteger(readRecord(body)?.id);
+        if (!carePlanId) throw new Error("AlayaCare created the care plan but did not return its ID.");
+
+        for (const [childName, endpoint] of [["diagnoses", "diagnoses"], ["goals", "goals"], ["interventions", "interventions"]] as const) {
+          for (const child of readRecordArray(plan[childName])) {
+            const payload = sanitizeCarePlanChild(child, serviceIdMap);
+            const childResult = await this.postImportRecord("carePlans", `/api/v1/clinical/careplan/${carePlanId}/${endpoint}`, payload);
+            if (!childResult.ok) throw new Error(`${childName}: ${childResult.error ?? "request failed"}`);
+          }
+        }
+
+        const targetStatus = readNonEmptyString(plan.status)?.toLowerCase();
+        if (targetStatus && targetStatus !== "draft") {
+          const activationSource = `/api/v1/clinical/careplan/${carePlanId}/status/active`;
+          const activationResult = await this.postImportRecord("carePlans", activationSource, {}, "PUT");
+          if (!activationResult.ok) throw new Error(`status: ${activationResult.error ?? "activation failed"}`);
+        }
+        if (targetStatus === "completed" || targetStatus === "archived") {
+          const statusSource = `/api/v1/clinical/careplan/${carePlanId}/status/${targetStatus}`;
+          const statusPayload = targetStatus === "completed"
+            ? { related_information: { end_date: readNonEmptyString(plan.end_date) ?? new Date().toISOString().slice(0, 10) } }
+            : {};
+          const statusResult = await this.postImportRecord("carePlans", statusSource, statusPayload, "PUT");
+          if (!statusResult.ok) throw new Error(`status: ${statusResult.error ?? "request failed"}`);
+        }
+        results.push({
+          section: "carePlans",
+          source: collection,
+          ok: true,
+          disposition: "copied",
+          status: response.status,
+          error: importedName === name
+            ? undefined
+            : `Renamed from "${name}" to "${importedName}" because the original care plan name was already in use.`
+        });
+      } catch (error) {
+        results.push({ section: "carePlans", source: collection, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return results;
+  }
+
+  private async importClientStatus(clientId: number, status: string): Promise<ClientChartImportStepResult> {
+    const source = `/api/v1/patients/clients/${clientId}/status_events`;
+    // AlayaCare initializes this value when the status form opens and submits it a
+    // moment later. Reproduce that ordering so the event is neither upcoming nor
+    // earlier than the client's freshly-created Pending event.
+    const effectiveDate = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    return this.postImportRecord("status", source, {
+      id: null,
+      client_id: clientId,
+      status,
+      effective_date: effectiveDate,
+      end_date: null,
+      note: null,
+      status_reason: null
+    });
+  }
+
+  private async importClientForms(
+    clientId: number,
+    forms: Record<string, unknown>[] | undefined,
+    serviceIdMap: Map<number, number>
+  ): Promise<ClientChartImportStepResult[]> {
+    const source = "/api/v1/tasks/forms20/submissions/drafts";
+    const results: ClientChartImportStepResult[] = [];
+    for (const form of forms ?? []) {
+      const formId = readPositiveInteger(form.form_id);
+      const nestedFormData =
+        readRecord(form.data) ??
+        readRecord(form.form_data) ??
+        readRecord(form.submission) ??
+        readRecord(form.answers) ??
+        readRecord(form.values);
+      const formFields = Array.isArray(form.fields)
+        ? form.fields
+        : Array.isArray(nestedFormData?.fields)
+          ? nestedFormData.fields
+          : undefined;
+      if (!formId || !formFields) {
+        results.push({
+          section: "clientForms",
+          source,
+          ok: false,
+          skipped: true,
+          disposition: "unavailable",
+          error: "The export contains form metadata but not the form fields or answers required to recreate it. Re-export with the updated exporter to include form details."
+        });
+        continue;
+      }
+      const sourceServiceId = readPositiveInteger(form.service_id);
+      const serviceId = sourceServiceId ? serviceIdMap.get(sourceServiceId) : undefined;
+      if (sourceServiceId && !serviceId) {
+        results.push({ section: "clientForms", source, ok: false, skipped: true, disposition: "unavailable", error: "The form's linked service could not be recreated." });
+        continue;
+      }
+      try {
+        const fields = prepareFormDraftFields(formFields);
+        const hiddenFields = prepareFormDraftFields(form.hidden_fields ?? nestedFormData?.hidden_fields ?? []);
+        const draftPayload: Record<string, unknown> = {
+          form_id: formId,
+          account_id: clientId,
+          fields,
+          hidden_fields: hiddenFields
+        };
+        if (serviceId) draftPayload.service_id = serviceId;
+        const response = await fetch(source, {
+          method: "POST",
+          credentials: "include",
+          headers: authenticatedJsonWriteHeaders(),
+          body: JSON.stringify(draftPayload)
+        });
+        const body = await parseResponseBody(response);
+        if (!response.ok) throw new Error(`Request failed (${response.status}): ${formatResponseError(body)}`);
+        const submissionId = readPositiveInteger(readRecord(body)?.id);
+        if (!submissionId) throw new Error("AlayaCare created the form draft but did not return its ID.");
+        results.push({
+          section: "clientForms",
+          source,
+          ok: true,
+          disposition: "copied",
+          status: response.status,
+          error: "Form answers were recreated as a new draft; approval and audit history were intentionally not forged."
+        });
+      } catch (error) {
+        results.push({ section: "clientForms", source, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return results;
+  }
+
   private async fetchConnectorJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
@@ -2159,6 +2561,64 @@ function readPositiveInteger(value: unknown): number | undefined {
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function pickImportFields(
+  record: Record<string, unknown>,
+  allowed: Set<string>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([key, value]) => allowed.has(key) && value !== undefined)
+  );
+}
+
+function sanitizeCarePlanChild(
+  record: Record<string, unknown>,
+  serviceIdMap: Map<number, number>
+): Record<string, unknown> {
+  const excluded = new Set([
+    "_links", "id", "careplan_id", "client_id", "create_user_id", "update_user_id",
+    "complete_user_id", "created_at", "updated_at", "completed_at", "users_snapshots",
+    "revisions", "completions", "published_version"
+  ]);
+  const sanitize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sanitize);
+    const nested = readRecord(value);
+    if (!nested) return value;
+    return Object.fromEntries(
+      Object.entries(nested)
+        .filter(([key]) => !excluded.has(key))
+        .map(([key, child]) => [key, sanitize(child)])
+    );
+  };
+  const payload = sanitize(record) as Record<string, unknown>;
+  if (Array.isArray(record.service_ids)) {
+    payload.service_ids = record.service_ids.flatMap((id) => {
+      const mapped = serviceIdMap.get(readPositiveInteger(id) ?? -1);
+      return mapped ? [mapped] : [];
+    });
+  }
+  if (Array.isArray(record.goals)) {
+    payload.goals = [];
+  }
+  return payload;
+}
+
+function prepareFormDraftFields(value: unknown): Array<{ field_id: number; field_value: unknown }> {
+  return readRecordArray(value).flatMap((field) => {
+    const fieldId = readPositiveInteger(field.field_id);
+    if (!fieldId) return [];
+    return [{
+      field_id: fieldId,
+      field_value: field.field_value ?? null
+    }];
+  });
 }
 
 function authenticatedJsonWriteHeaders(): Record<string, string> {
@@ -2648,7 +3108,16 @@ function formatResponseError(value: unknown): string {
   if (!value || typeof value !== "object") return "Unknown response";
   const record = value as Record<string, unknown>;
   const message = readNonEmptyString(record.message) ?? readNonEmptyString(record.error);
-  return message ?? JSON.stringify(value).slice(0, 500);
+  const details = [record.details, record.detail, record.errors, record.validation_errors]
+    .filter((item) => item !== undefined && item !== null)
+    .map((item) => typeof item === "string" ? item : JSON.stringify(item))
+    .filter(Boolean)
+    .join("; ");
+  return [message, details].filter(Boolean).join(": ").slice(0, 500) || JSON.stringify(value).slice(0, 500);
+}
+
+function isCarePlanNameConflict(value: unknown): boolean {
+  return formatResponseError(value).toLowerCase().includes("care plan name already in use");
 }
 
 function unwrapConnectorResponse(value: unknown): unknown {

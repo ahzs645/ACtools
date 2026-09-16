@@ -662,6 +662,15 @@ html[data-surface="sidepanel"] body {
   letter-spacing: 0.04em;
 }
 
+.field__required {
+  margin-left: var(--ac-space-4);
+  color: var(--ac-color-status-danger-foreground);
+  font-size: var(--ac-font-size-100);
+  font-weight: var(--ac-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .field__row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -747,6 +756,10 @@ input[type="file"].input::file-selector-button {
   color: var(--ac-color-neutral-foreground-3);
   font-size: var(--ac-font-size-100);
   line-height: var(--ac-line-height-200);
+}
+
+.field__hint--required {
+  color: var(--ac-color-status-danger-foreground);
 }
 
 .field--full {
@@ -1399,6 +1412,16 @@ input[type="file"].input::file-selector-button {
 .chart-import__target-hint {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+.chart-import__health-number-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--ac-space-6);
+}
+
+.chart-import__health-number-control .button {
+  font-size: var(--ac-font-size-200);
 }
 
 .chart-import__sections-hint {

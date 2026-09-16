@@ -262,6 +262,12 @@ async function init(): Promise<void> {
     void createClientChartImport();
   });
 
+  elements.generateClientChartHealthCardButton.addEventListener("click", () => {
+    elements.clientChartImportHealthCard.value = generateSyntheticHealthNumber();
+    elements.clientChartImportHealthCard.dispatchEvent(new Event("input", { bubbles: true }));
+    elements.clientChartImportHealthCard.focus();
+  });
+
   for (const element of [
     elements.clientChartImportFirstName,
     elements.clientChartImportLastName,
@@ -1207,6 +1213,7 @@ interface PopupElements {
   clientChartImportLastName: HTMLInputElement;
   clientChartImportBirthday: HTMLInputElement;
   clientChartImportHealthCard: HTMLInputElement;
+  generateClientChartHealthCardButton: HTMLButtonElement;
   clientChartImportGender: HTMLSelectElement;
   clientChartImportEmail: HTMLInputElement;
   clientChartImportPhoneMain: HTMLInputElement;
@@ -1342,6 +1349,9 @@ function getPopupElements(): PopupElements {
   );
   const clientChartImportHealthCard = document.querySelector<HTMLInputElement>(
     "#client-chart-import-health-card"
+  );
+  const generateClientChartHealthCardButton = document.querySelector<HTMLButtonElement>(
+    "#generate-client-chart-health-card"
   );
   const clientChartImportGender = document.querySelector<HTMLSelectElement>(
     "#client-chart-import-gender"
@@ -1496,6 +1506,7 @@ function getPopupElements(): PopupElements {
     !clientChartImportLastName ||
     !clientChartImportBirthday ||
     !clientChartImportHealthCard ||
+    !generateClientChartHealthCardButton ||
     !clientChartImportGender ||
     !clientChartImportEmail ||
     !clientChartImportPhoneMain ||
@@ -1597,6 +1608,7 @@ function getPopupElements(): PopupElements {
     clientChartImportLastName,
     clientChartImportBirthday,
     clientChartImportHealthCard,
+    generateClientChartHealthCardButton,
     clientChartImportGender,
     clientChartImportEmail,
     clientChartImportPhoneMain,
@@ -2163,6 +2175,7 @@ function resetClientChartImportPreviewUi(): void {
   elements.clientChartImportBirthday.disabled = true;
   elements.clientChartImportHealthCard.value = "";
   elements.clientChartImportHealthCard.disabled = true;
+  elements.generateClientChartHealthCardButton.disabled = true;
   elements.clientChartImportGender.value = "O";
   elements.clientChartImportGender.disabled = true;
   elements.clientChartImportEmail.value = "";
@@ -2226,12 +2239,13 @@ async function previewClientChartImport(): Promise<void> {
       elements.clientChartImportBirthday.value = preview.birthday ?? "";
       elements.clientChartImportHealthCard.disabled = false;
       elements.clientChartImportHealthCard.value = "";
+      elements.generateClientChartHealthCardButton.disabled = false;
       elements.clientChartImportGender.disabled = false;
       elements.clientChartImportGender.value = preview.suggestedGender;
       elements.clientChartImportEmail.disabled = false;
-      elements.clientChartImportEmail.value = "";
+      elements.clientChartImportEmail.value = preview.suggestedEmail ?? "";
       elements.clientChartImportPhoneMain.disabled = false;
-      elements.clientChartImportPhoneMain.value = "";
+      elements.clientChartImportPhoneMain.value = preview.suggestedPhoneMain ?? "";
       elements.clientChartImportDestination.hidden = false;
       elements.clientChartImportDestinationCount.textContent = "Loading";
       elements.clientChartImportDestinationCount.dataset.tone = "neutral";
@@ -2241,14 +2255,14 @@ async function previewClientChartImport(): Promise<void> {
       elements.clientChartImportFacilities.append(loadingDestinations);
       await loadClientChartWriteDestinations(preview);
       elements.clientChartImportSections.hidden = false;
-      elements.clientChartImportSections.disabled = false;
-      elements.clientChartImportMedicalHistory.disabled = !preview.medicalHistory.available;
+      elements.clientChartImportSections.disabled = true;
+      elements.clientChartImportMedicalHistory.disabled = true;
       elements.clientChartImportMedicalHistory.checked = preview.medicalHistory.available;
-      elements.clientChartImportRiskAssessment.disabled = !preview.riskAssessment.available;
+      elements.clientChartImportRiskAssessment.disabled = true;
       elements.clientChartImportRiskAssessment.checked = preview.riskAssessment.available;
-      elements.clientChartImportProgressNotes.disabled = !preview.progressNotes.available;
+      elements.clientChartImportProgressNotes.disabled = true;
       elements.clientChartImportProgressNotes.checked = preview.progressNotes.available;
-      elements.clientChartImportMedications.disabled = !preview.medications.available;
+      elements.clientChartImportMedications.disabled = true;
       elements.clientChartImportMedications.checked = preview.medications.available;
       elements.clientChartImportConfirmContainer.hidden = false;
       elements.clientChartImportConfirm.disabled = false;
@@ -2258,7 +2272,7 @@ async function previewClientChartImport(): Promise<void> {
       return [
         `Validated the chart export for ${preview.sourceClientName}.`,
         `Loaded ${clientChartDestinationCatalog?.groups.length ?? 0} care locations/client groups.`,
-        "Review the suggested basic information and care locations, then choose clinical sections to replay."
+        "Review the synthetic identity and destination. All available chart sections will be recreated automatically."
       ].join("\n");
     } catch (error) {
       clientChartImportPreview = null;
@@ -2367,11 +2381,21 @@ function selectedClientChartDestinationGroups(): ClientChartDestinationGroup[] {
 }
 
 function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview): string {
-  const supported = [
+  const sections = [
+    `Profile fields: ${preview.profile.recordCount}`,
+    `Status: ${preview.targetStatus ?? "pending"}`,
     `Medical history: ${preview.medicalHistory.available ? `${preview.medicalHistory.recordCount} populated values` : "not available"}`,
     `Risk assessment: ${preview.riskAssessment.available ? `${preview.riskAssessment.recordCount} risks` : "not available"}`,
     `Progress notes: ${preview.progressNotes.available ? `${preview.progressNotes.recordCount} notes` : "not available"}`,
-    `Medications: ${preview.medications.available ? `${preview.medications.recordCount} medications` : "not available"}`
+    `Medications: ${preview.medications.recordCount}`,
+    `Client notes: ${preview.clientNotes.recordCount}`,
+    `Care-provider notes: ${preview.careProviderNotes.recordCount}`,
+    `Services: ${preview.services.recordCount}`,
+    `Authorizations: ${preview.authorizations.recordCount}`,
+    `Required care skills: ${preview.requiredCareSkills.recordCount}`,
+    `Care plans: ${preview.carePlans.recordCount}`,
+    `Client forms: ${preview.clientForms.recordCount}`,
+    `Audit events: ${preview.eventCount} source events (new events will be generated)`
   ];
   return [
     `Source: ${preview.sourceClientName} (Client ${preview.sourceClientId})`,
@@ -2380,10 +2404,15 @@ function buildClientChartImportPreviewSummary(preview: ClientChartImportPreview)
     `Source care locations/groups: ${preview.sourceGroupNames.join(", ") || "none reported"}`,
     `Available destinations: ${clientChartDestinationCatalog?.groups.length ?? 0} care locations/groups; ${clientChartDestinationCatalog?.costCentres.length ?? 0} cost centres`,
     "",
-    "Supported in this version:",
-    ...supported.map((value) => `- ${value}`),
+    "Will recreate automatically:",
+    ...sections.map((value) => `- ${value}`),
     "",
-    "Populated sections reported but not imported:",
+    "Unavailable from this export:",
+    ...(preview.unavailablePopulatedSections.length > 0
+      ? preview.unavailablePopulatedSections.map((name) => `- ${name}`)
+      : ["- none detected"]),
+    "",
+    "Other populated sections not writable:",
     ...(preview.unsupportedPopulatedSections.length > 0
       ? preview.unsupportedPopulatedSections.map((name) => `- ${name}`)
       : ["- none detected"]),
@@ -2414,6 +2443,14 @@ function updateClientChartImportCreateAvailability(): void {
   );
 }
 
+function generateSyntheticHealthNumber(): string {
+  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const randomValues = new Uint32Array(1);
+  crypto.getRandomValues(randomValues);
+  const suffix = String(randomValues[0] % 1_000_000).padStart(6, "0");
+  return `UAT-${date}-${suffix}`;
+}
+
 async function createClientChartImport(): Promise<void> {
   await withResult(async () => {
     requireClientChartFeature("import");
@@ -2441,12 +2478,6 @@ async function createClientChartImport(): Promise<void> {
       (costCentre) => costCentre.code === elements.clientChartImportCostCentre.value
     );
 
-    const selectedSections = [
-      elements.clientChartImportMedicalHistory.checked ? "medical history" : "",
-      elements.clientChartImportRiskAssessment.checked ? "risk assessment" : "",
-      elements.clientChartImportProgressNotes.checked ? "progress notes" : "",
-      elements.clientChartImportMedications.checked ? "medications" : ""
-    ].filter(Boolean);
     const confirmed = window.confirm(
       [
         `Create a new synthetic client named ${firstName} ${lastName}?`,
@@ -2459,7 +2490,7 @@ async function createClientChartImport(): Promise<void> {
         `Gender: ${gender}`,
         `Email: ${email || "not set"}`,
         `Main phone: ${phoneMain || "not set"}`,
-        `Replay sections: ${selectedSections.join(" and ") || "none (basic client only)"}`,
+        "Replay: every available chart section in the JSON; source audit events are regenerated.",
         "",
         "This creates a new record and cannot be undone by AC Tools."
       ].join("\n")
@@ -2469,7 +2500,7 @@ async function createClientChartImport(): Promise<void> {
     setClientChartImportControlsDisabled(true);
     clientChartImportResult = null;
     elements.clientChartImportSummary.textContent =
-      "Creating the synthetic UAT client and replaying selected clinical sections…";
+      "Creating the synthetic UAT client and replaying all available chart sections…";
     try {
       const response = await sendRuntimeMessage<ClientChartImportResult>({
         type: "ac/popup/import-client-chart",
@@ -2486,20 +2517,22 @@ async function createClientChartImport(): Promise<void> {
           gender,
           email: email || undefined,
           phoneMain: phoneMain || undefined,
+          profileData: preview.profile.data,
+          targetStatus: preview.targetStatus,
           destinationGroupIds: destinationGroups.map((group) => group.id),
           costCentreCode: selectedCostCentre?.code,
-          medicalHistoryData: elements.clientChartImportMedicalHistory.checked
-            ? preview.medicalHistory.data
-            : undefined,
-          riskAssessmentData: elements.clientChartImportRiskAssessment.checked
-            ? preview.riskAssessment.data
-            : undefined,
-          progressNotesData: elements.clientChartImportProgressNotes.checked
-            ? preview.progressNotes.data
-            : undefined,
-          medicationsData: elements.clientChartImportMedications.checked
-            ? preview.medications.data
-            : undefined
+          medicalHistoryData: preview.medicalHistory.data,
+          riskAssessmentData: preview.riskAssessment.data,
+          progressNotesData: preview.progressNotes.data,
+          medicationsData: preview.medications.data,
+          clientNotesData: preview.clientNotes.data,
+          careProviderNotesData: preview.careProviderNotes.data,
+          servicesData: preview.services.data,
+          authorizationsData: preview.authorizations.data,
+          requiredCareSkillsData: preview.requiredCareSkills.data,
+          carePlansData: preview.carePlans.data,
+          clientFormsData: preview.clientForms.data,
+          sourceEventCount: preview.eventCount
         }
       });
       if (!response.ok || !response.data) {
@@ -2518,13 +2551,13 @@ async function createClientChartImport(): Promise<void> {
         showToast(
           "warning",
           "Client created with import warnings",
-          `${response.data.counts.failed} selected clinical replay step failed. Download the report for details.`
+          `${response.data.counts.failed} chart import step failed or lacked source data. Download the report for details.`
         );
       } else {
         showToast(
           "success",
           "Synthetic client created",
-          `${response.data.targetClient.fullName} was created with the selected clinical sections.`
+          `${response.data.targetClient.fullName} was created with all available chart sections.`
         );
       }
       return [
@@ -2550,6 +2583,7 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
   elements.clientChartImportLastName.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportBirthday.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportHealthCard.disabled = disabled || !clientChartImportPreview;
+  elements.generateClientChartHealthCardButton.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportGender.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportEmail.disabled = disabled || !clientChartImportPreview;
   elements.clientChartImportPhoneMain.disabled = disabled || !clientChartImportPreview;
@@ -2560,20 +2594,29 @@ function setClientChartImportControlsDisabled(disabled: boolean): void {
     checkbox.disabled = disabled || !clientChartDestinationCatalog;
   }
   elements.clientChartImportCostCentre.disabled = disabled || !clientChartDestinationCatalog;
-  elements.clientChartImportSections.disabled = disabled || !clientChartImportPreview;
-  elements.clientChartImportProgressNotes.disabled =
-    disabled || !clientChartImportPreview?.progressNotes.available;
-  elements.clientChartImportMedications.disabled =
-    disabled || !clientChartImportPreview?.medications.available;
+  elements.clientChartImportSections.disabled = true;
+  elements.clientChartImportMedicalHistory.disabled = true;
+  elements.clientChartImportRiskAssessment.disabled = true;
+  elements.clientChartImportProgressNotes.disabled = true;
+  elements.clientChartImportMedications.disabled = true;
   elements.clientChartImportConfirm.disabled = disabled || !clientChartImportPreview;
   elements.createClientChartImportButton.disabled = disabled;
 }
 
 function buildClientChartImportResultSummary(result: ClientChartImportResult): string {
-  const steps = result.steps.map(
-    (step) =>
-      `- ${step.section}: ${step.skipped ? "already present (skipped)" : step.ok ? `success${step.status ? ` (${step.status})` : ""}` : `failed — ${step.error ?? "unknown error"}`}`
-  );
+  const steps = result.steps.map((step) => {
+    if (step.disposition === "regenerated") {
+      return `- ${step.section}: regenerated — ${step.error ?? "new audit records were created"}`;
+    }
+    if (step.disposition === "unavailable") {
+      return `- ${step.section}: unavailable — ${step.error ?? "the export lacks required data"}`;
+    }
+    if (step.skipped) return `- ${step.section}: already present (skipped)`;
+    if (step.ok) {
+      return `- ${step.section}: success${step.status ? ` (${step.status})` : ""}${step.error ? ` — ${step.error}` : ""}`;
+    }
+    return `- ${step.section}: failed — ${step.error ?? "unknown error"}`;
+  });
   return [
     `Created: ${result.targetClient.fullName}`,
     `Client ID: ${result.targetClient.id}`,
@@ -2584,11 +2627,11 @@ function buildClientChartImportResultSummary(result: ClientChartImportResult): s
     `Care locations/groups: ${result.targetClient.destinationGroups.map((group) => group.name).join(", ")}`,
     `Cost centre: ${result.targetClient.costCentre?.name ?? "none"}`,
     `Steps: ${result.counts.successful}/${result.counts.requested} successful`,
-    `Already present: ${result.counts.skipped}`,
+    `Skipped/regenerated/unavailable: ${result.counts.skipped}`,
     "",
     ...steps,
     "",
-    `Not imported: ${result.scope.omittedSections.join(", ")}.`
+    `Not copied verbatim: ${result.scope.omittedSections.join(", ") || "none"}.`
   ].join("\n");
 }
 

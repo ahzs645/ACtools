@@ -270,8 +270,35 @@
         <input id="client-chart-import-birthday" class="input" type="date" required disabled />
       </label>
       <label class="field" for="client-chart-import-health-card">
-        <span class="field__label">Health card number</span>
-        <input id="client-chart-import-health-card" class="input" type="text" maxlength="100" autocomplete="off" required disabled />
+        <span class="field__label">
+          Synthetic health number
+          <span class="field__required">Required</span>
+        </span>
+        <span class="chart-import__health-number-control">
+          <input
+            id="client-chart-import-health-card"
+            class="input"
+            type="text"
+            maxlength="100"
+            autocomplete="off"
+            aria-describedby="client-chart-import-health-card-hint"
+            placeholder="Required before creating the client"
+            required
+            disabled
+          />
+          <button
+            id="generate-client-chart-health-card"
+            type="button"
+            class="button button--secondary"
+            title="Generate a clearly synthetic UAT health number"
+            disabled
+          >
+            Generate synthetic number
+          </button>
+        </span>
+        <small id="client-chart-import-health-card-hint" class="field__hint field__hint--required">
+          Required. Enter a test-only value or generate one; the source client's health card is never copied.
+        </small>
       </label>
       <label class="field" for="client-chart-import-gender">
         <span class="field__label">Gender</span>
@@ -290,7 +317,7 @@
         <input id="client-chart-import-phone-main" class="input" type="tel" maxlength="50" autocomplete="off" disabled />
       </label>
       <p class="field__hint chart-import__target-hint">
-        Name, date of birth, and gender are suggested. Enter a new synthetic health card number; source identifiers are never copied.
+        Name, date of birth, and gender are suggested. Source identifiers are never copied.
       </p>
     </div>
 
@@ -332,7 +359,7 @@
     </section>
 
     <fieldset class="chart-import__sections" disabled hidden>
-      <legend>Replay supported clinical sections (optional)</legend>
+      <legend>Clinical data included automatically</legend>
       <label class="check-field check-field--plain">
         <input id="client-chart-import-medical-history" type="checkbox" />
         <span>Medical history</span>
@@ -349,12 +376,12 @@
         <input id="client-chart-import-medications" type="checkbox" />
         <span>Medications</span>
       </label>
-      <p class="field__hint chart-import__sections-hint">Leave all unchecked to create only the editable basic client record.</p>
+      <p class="field__hint chart-import__sections-hint">These indicators show what is present. The importer also recreates profile fields, status, notes, services, authorizations, required skills, and care plans automatically.</p>
     </fieldset>
 
     <label class="check-field chart-import__confirm" hidden>
       <input id="client-chart-import-confirm" type="checkbox" disabled />
-      <span>I understand this creates a new synthetic client in the active AlayaCare UAT tenant.</span>
+      <span>I understand this creates a new synthetic client and imports every available chart section in the active AlayaCare UAT tenant.</span>
     </label>
 
     <div class="utility-actions utility-actions--two">

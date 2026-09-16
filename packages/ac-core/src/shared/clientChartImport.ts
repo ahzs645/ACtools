@@ -19,6 +19,38 @@ export interface ClientChartProgressNoteImport {
 }
 
 export type ClientChartMedicationImport = Record<string, unknown>;
+export type ClientChartRawImport = Record<string, unknown>;
+
+export interface ClientChartProfileImport {
+  preferred_name?: string;
+  address?: string;
+  address_line_2?: string;
+  city?: string;
+  county?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+  language?: string;
+  timezone?: string;
+  emergency_response_level?: string;
+  tags_v2?: string[];
+}
+
+export type ClientChartImportSectionName =
+  | "client"
+  | "status"
+  | "medicalHistory"
+  | "riskAssessment"
+  | "progressNotes"
+  | "medications"
+  | "clientNotes"
+  | "careProviderNotes"
+  | "services"
+  | "authorizations"
+  | "requiredCareSkills"
+  | "carePlans"
+  | "clientForms"
+  | "events";
 
 export interface ClientChartDestinationGroup {
   id: number;
@@ -50,11 +82,24 @@ export interface ClientChartImportPreview {
   suggestedLastName: string;
   birthday?: string;
   suggestedGender: "M" | "F" | "O";
+  suggestedEmail?: string;
+  suggestedPhoneMain?: string;
   sourceGroupNames: string[];
+  profile: ClientChartImportSectionPreview<ClientChartProfileImport>;
+  targetStatus?: string;
   medicalHistory: ClientChartImportSectionPreview;
   riskAssessment: ClientChartImportSectionPreview;
   progressNotes: ClientChartImportSectionPreview<ClientChartProgressNoteImport[]>;
   medications: ClientChartImportSectionPreview<ClientChartMedicationImport[]>;
+  clientNotes: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  careProviderNotes: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  services: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  authorizations: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  requiredCareSkills: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  carePlans: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  clientForms: ClientChartImportSectionPreview<ClientChartRawImport[]>;
+  eventCount: number;
+  unavailablePopulatedSections: string[];
   unsupportedPopulatedSections: string[];
   omittedIdentityFields: string[];
 }
@@ -72,19 +117,30 @@ export interface ClientChartImportRequest {
   healthCard: string;
   email?: string;
   phoneMain?: string;
+  profileData?: ClientChartProfileImport;
+  targetStatus?: string;
   destinationGroupIds: number[];
   costCentreCode?: string;
   medicalHistoryData?: Record<string, unknown>;
   riskAssessmentData?: Record<string, unknown>;
   progressNotesData?: ClientChartProgressNoteImport[];
   medicationsData?: ClientChartMedicationImport[];
+  clientNotesData?: ClientChartRawImport[];
+  careProviderNotesData?: ClientChartRawImport[];
+  servicesData?: ClientChartRawImport[];
+  authorizationsData?: ClientChartRawImport[];
+  requiredCareSkillsData?: ClientChartRawImport[];
+  carePlansData?: ClientChartRawImport[];
+  clientFormsData?: ClientChartRawImport[];
+  sourceEventCount?: number;
 }
 
 export interface ClientChartImportStepResult {
-  section: "client" | "medicalHistory" | "riskAssessment" | "progressNotes" | "medications";
+  section: ClientChartImportSectionName;
   source: string;
   ok: boolean;
   skipped?: boolean;
+  disposition?: "copied" | "regenerated" | "unavailable";
   status?: number;
   error?: string;
 }
@@ -109,26 +165,17 @@ export interface ClientChartImportResult {
   counts: { requested: number; successful: number; skipped: number; failed: number };
   scope: {
     syntheticUatOnly: true;
-    copiedSections: Array<"medicalHistory" | "riskAssessment" | "progressNotes" | "medications">;
+    copiedSections: ClientChartImportSectionName[];
+    regeneratedSections: ClientChartImportSectionName[];
     omittedSections: string[];
   };
 }
 
 const UNSUPPORTED_IMPORT_SECTIONS = [
-  "statusHistory",
   "contacts",
-  "clientNotes",
-  "careProviderNotes",
-  "services",
-  "authorizations",
-  "carePlans",
-  "carePlanDetails",
-  "clientForms",
   "documentApprovals",
   "attachmentMetadata",
   "visitAttachmentMetadata",
-  "requiredCareSkills",
-  "events",
   "visitReports",
   "associatedEmployees",
   "blockedEmployeeDetails",
@@ -143,6 +190,15 @@ export function buildClientChartImportPreview(value: unknown): ClientChartImport
   const progressNotes = sanitizeProgressNotesForImport(readSectionItems(snapshot, "progressNotes"));
   const medications = sanitizeMedicationsForImport(readSectionItems(snapshot, "medications"));
   const overview = readRecord(snapshot.sections.overview?.data);
+  const profile = sanitizeProfileForImport(demographics, overview);
+  const clientNotes = readSectionItems(snapshot, "clientNotes");
+  const careProviderNotes = readSectionItems(snapshot, "careProviderNotes");
+  const services = readSectionItems(snapshot, "services");
+  const authorizations = readSectionItems(snapshot, "authorizations");
+  const requiredCareSkills = readSectionItems(snapshot, "requiredCareSkills");
+  const carePlans = readCarePlanDetails(snapshot);
+  const clientForms = readDetailedSection(snapshot, "clientFormDetails", "clientForms");
+  const events = readSectionItems(snapshot, "events");
   const firstName = readString(demographics?.first_name) ?? firstNameFromFullName(snapshot.client.fullName);
   const lastName = readString(demographics?.last_name) ?? lastNameFromFullName(snapshot.client.fullName);
 
@@ -155,31 +211,108 @@ export function buildClientChartImportPreview(value: unknown): ClientChartImport
     suggestedLastName: `${lastName || "Clone"} Copy`,
     birthday: readString(demographics?.birthday),
     suggestedGender: normalizeGender(demographics?.gender),
+    suggestedEmail: readString(demographics?.email) ?? readString(overview?.email),
+    suggestedPhoneMain: readString(demographics?.phone_main) ?? readString(overview?.phone_main),
     sourceGroupNames: readStringArray(overview?.groups),
+    profile: { available: Object.keys(profile).length > 0, recordCount: Object.keys(profile).length, data: profile },
+    targetStatus: readString(overview?.status),
     medicalHistory: buildSectionPreview(medicalHistory),
     riskAssessment: buildSectionPreview(sanitizeRiskAssessmentForImport(riskAssessment)),
     progressNotes: buildListSectionPreview(progressNotes),
     medications: buildListSectionPreview(medications),
+    clientNotes: buildListSectionPreview(clientNotes),
+    careProviderNotes: buildListSectionPreview(careProviderNotes),
+    services: buildListSectionPreview(services),
+    authorizations: buildListSectionPreview(authorizations),
+    requiredCareSkills: buildListSectionPreview(requiredCareSkills),
+    carePlans: buildListSectionPreview(carePlans),
+    clientForms: buildListSectionPreview(clientForms),
+    eventCount: events.length,
+    unavailablePopulatedSections: clientForms.length > 0 && !clientForms.some(hasFormSubmissionData)
+      ? ["client form answers (this export contains form metadata only)"]
+      : [],
     unsupportedPopulatedSections: UNSUPPORTED_IMPORT_SECTIONS.filter((name) =>
       hasSectionData(snapshot.sections[name]?.data)
     ),
     omittedIdentityFields: [
       "source client/profile/GUID identifiers",
       "external ID and health card",
-      "source address, phone, and email unless entered for the new client",
       "attachments and attachment contents",
-      "audit authors, timestamps, and document versions"
+      "source record IDs, audit authors, timestamps, and document versions"
     ]
   };
 }
 
 function readSectionItems(
   snapshot: ClientChartExportSnapshot,
-  sectionName: "progressNotes" | "medications"
+  sectionName: string
 ): Record<string, unknown>[] {
-  const section = snapshot.sections[sectionName];
+  const section = snapshot.sections[sectionName as keyof typeof snapshot.sections];
   if (!section?.ok) return [];
   return readCollectionItems(section.data);
+}
+
+function readCarePlanDetails(snapshot: ClientChartExportSnapshot): Record<string, unknown>[] {
+  const details = snapshot.sections.carePlanDetails;
+  if (!details?.ok || !Array.isArray(details.data)) return readSectionItems(snapshot, "carePlans");
+  return details.data.flatMap((item) => {
+    const envelope = readRecord(item);
+    const data = readRecord(envelope?.data);
+    return data ? [data] : [];
+  });
+}
+
+function readDetailedSection(
+  snapshot: ClientChartExportSnapshot,
+  detailName: string,
+  fallbackName: string
+): Record<string, unknown>[] {
+  const details = snapshot.sections[detailName];
+  if (!details?.ok || !Array.isArray(details.data)) return readSectionItems(snapshot, fallbackName);
+  return details.data.flatMap((item) => {
+    const envelope = readRecord(item);
+    const data = readRecord(envelope?.data);
+    return data ? [data] : [];
+  });
+}
+
+function hasFormSubmissionData(form: Record<string, unknown>): boolean {
+  return Boolean(
+    Array.isArray(form.fields) ||
+    (readRecord(form.data) ??
+      readRecord(form.form_data) ??
+      readRecord(form.submission) ??
+      readRecord(form.answers) ??
+      readRecord(form.values))
+  );
+}
+
+function sanitizeProfileForImport(
+  demographics: Record<string, unknown> | undefined,
+  overview: Record<string, unknown> | undefined
+): ClientChartProfileImport {
+  const address = readRecord(demographics?.full_address) ?? readRecord(overview?.full_address);
+  const profile: ClientChartProfileImport = {};
+  const fields: Array<[keyof ClientChartProfileImport, unknown]> = [
+    ["preferred_name", demographics?.preferred_name ?? overview?.preferred_name],
+    ["address", address?.address_line_1 ?? demographics?.address ?? overview?.address],
+    ["address_line_2", address?.address_line_2],
+    ["city", address?.city ?? demographics?.city ?? overview?.city],
+    ["county", address?.county],
+    ["state", address?.state ?? demographics?.state ?? overview?.state],
+    ["zip", address?.zip ?? demographics?.zip ?? overview?.zip],
+    ["country", address?.country ?? demographics?.country ?? overview?.country],
+    ["language", demographics?.language ?? overview?.language],
+    ["timezone", demographics?.timezone ?? overview?.effective_timezone],
+    ["emergency_response_level", demographics?.emergency_response_level ?? overview?.emergency_response_level]
+  ];
+  for (const [key, value] of fields) {
+    const text = readString(value);
+    if (text) (profile as Record<string, unknown>)[key] = text;
+  }
+  const tags = readStringArray(demographics?.tags_v2 ?? overview?.tags_v2);
+  if (tags.length > 0) profile.tags_v2 = tags;
+  return profile;
 }
 
 function readCollectionItems(value: unknown): Record<string, unknown>[] {
