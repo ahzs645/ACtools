@@ -8,6 +8,7 @@ files:
   - out/**
   - package.json
   - "!**/*.map"
+  - "!**/node_modules/@napi-rs/**"
 asarUnpack:
   - "**/node_modules/pdfjs-dist/**"
 win:
