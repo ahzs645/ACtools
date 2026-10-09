@@ -1,0 +1,1 @@
+export function nativeFormRequest(method:'GET'|'POST'|'PUT',path:string,body?:unknown,host?:{location:{origin:string;hash:string};jQuery?:{ajax:(options:Record<string,unknown>)=>Promise<unknown>}}):Promise<any>;

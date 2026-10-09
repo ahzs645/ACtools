@@ -10,6 +10,7 @@ import {
 import { createPopupRouter } from "@ac-core/router";
 import { getSupportedTabOrigin, isSupportedAlayaCareUrl } from "./alayaCareUrls";
 import { chromePlatform } from "./platform";
+import { CATALOG_REQUEST, routeCatalogRefresh } from '@ac-core/shared/tenant-catalog.mjs';
 
 const SIDE_PANEL_PATH = "sidepanel.html";
 const POPUP_PATH = "sidepanel.html?surface=popup";
@@ -29,7 +30,12 @@ let currentSurface: Surface = DEFAULT_SURFACE;
 
 void initialize();
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (message && typeof message === 'object' && 'type' in message && message.type === CATALOG_REQUEST) {
+    if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab?.url) { sendResponse({ ok: false, error: 'Invalid catalog request context.' }); return false; }
+    void chrome.tabs.query({ url: 'https://northernhealth.uat.alayacare.ca/*' }).then(tabs => routeCatalogRefresh(sender.tab!.url!, tabs, (id, request) => chrome.tabs.sendMessage(id, request))).then(sendResponse, error => sendResponse({ ok: false, error: formatError(error) }));
+    return true;
+  }
   if (!isRuntimeMessage(message) || !isPopupMessage(message)) {
     return false;
   }

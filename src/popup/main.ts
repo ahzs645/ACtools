@@ -1,3 +1,4 @@
+import { FormDeploymentController } from "./features/formDefinitions/deploymentController";
 import "./styles.css";
 
 import { sendRuntimeMessage } from "../shared/chrome";
@@ -47,6 +48,7 @@ import { EmployeeCopyController } from "./features/employees/copyController";
 import { EmployeeTaskCloneController } from "./features/employees/taskCloneController";
 import { DesktopTenantBar } from "./features/desktop/tenantBar";
 import { ShiftLabController } from "./features/shifts/controller";
+import { FormDefinitionsController } from "./features/formDefinitions/controller";
 import {
   type EmployeeSortField,
   type SortDirection,
@@ -119,6 +121,8 @@ const environmentManager = new EnvironmentManagerController(async () => {
 });
 const connectorUtilities = new ConnectorUtilitiesController();
 const shiftLab = new ShiftLabController();
+new FormDefinitionsController({ send: sendRuntimeMessage, download: downloadFile });
+new FormDeploymentController({ send: sendRuntimeMessage, download: downloadFile });
 const employeeCopyController = new EmployeeCopyController({
   getEmployee: () => selectedEmployee
     ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }

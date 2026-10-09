@@ -1,4 +1,6 @@
+import type { DraftDeploymentPreview, DraftDeploymentReceipt } from "./deployment.mjs";
 import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
+import type { DefinitionCapture, FormListEntry, DefinitionCaptureRequest, CaptureScope } from "./capture.mjs";
 import type {
   ClientChartExportSnapshot,
   ClientChartRankResponse,
@@ -92,6 +94,16 @@ export interface DesktopSessionState {
 }
 
 export type RuntimeMessage =
+  | { type: "ac/popup/preview-form-drafts"; payload: { package: unknown } }
+  | { type: "ac/content/preview-form-drafts"; payload: { package: unknown } }
+  | { type: "ac/popup/push-form-drafts"; payload: { package: unknown; approvedDigest: string } }
+  | { type: "ac/content/push-form-drafts"; payload: { package: unknown; approvedDigest: string } }
+  | { type: "ac/popup/get-form-draft-receipt"; payload: { packageId: string } }
+  | { type: "ac/content/get-form-draft-receipt"; payload: { packageId: string } }
+  | { type: "ac/popup/list-form-definitions"; payload?: CaptureScope }
+  | { type: "ac/popup/export-form-definitions"; payload: DefinitionCaptureRequest }
+  | { type: "ac/content/list-form-definitions"; payload?: CaptureScope }
+  | { type: "ac/content/export-form-definitions"; payload: DefinitionCaptureRequest }
   | {
       type: "ac/popup/get-status";
     }
@@ -323,6 +335,10 @@ export type RuntimeMessage =
     };
 
 export type ContentCommandData =
+  | DraftDeploymentPreview
+  | DraftDeploymentReceipt
+  | DefinitionCapture
+  | FormListEntry[]
   | PageStatus
   | AvailabilityPostResult
   | AlayaCareFormContextCatalogSnapshot

@@ -1,7 +1,7 @@
 {
   "name": "AC Tools",
   "description": "Toolkit for AlayaCare scheduling utilities, shift management, and Rotation Manager workflows.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "manifest_version": 3,
   "action": {
     "default_title": "AC Tools"
@@ -39,6 +39,16 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://northernhealth.uat.alayacare.ca/*"
+      ],
+      "js": [
+        "form-deployment-main.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ]
 }

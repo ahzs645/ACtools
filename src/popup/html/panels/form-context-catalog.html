@@ -1,5 +1,33 @@
 <div id="panel-form-context-catalog" class="tool-panel">
   <div class="utility-card">
+    <h3 class="utility-card__title">Forms for Webforms</h3>
+    <p class="utility-card__body">Exports form definitions and linked subforms from Northern Health UAT. Open the capture in Webforms or Form Config → Form library. Captures exclude patient answers, templates and attachments. Include archived forms or older versions when needed.</p>
+    <label><input id="include-archived-form-definitions" type="checkbox" checked> Include archived forms</label>
+    <label><input id="include-form-version-history" type="checkbox"> Include older versions (up to 200 per form)</label>
+    <label><input id="include-form-tenant-options" type="checkbox" checked> Include tenant field options, note types, roles and categories (definitions only)</label>
+    <div class="utility-actions">
+      <button id="load-form-definitions" type="button" class="button button--secondary">Load form list</button>
+      <button id="export-all-form-definitions" type="button" class="button button--primary">Export all forms (with subforms)</button>
+    </div>
+    <label for="form-definition-selection">Selected form</label>
+    <select id="form-definition-selection" disabled><option value="">Load the list first</option></select>
+    <button id="export-selected-form-definition" type="button" class="button button--secondary" disabled>Export selected form (with subforms)</button>
+    <p id="form-definition-status" class="utility-card__body" role="status" aria-live="polite">Downloads a versioned capture for Webforms. No definitions are changed in AlayaCare.</p>
+  </div>
+<section class="utility-card">
+  <h3 class="utility-card__title">Push edited forms from Webforms</h3>
+  <p class="utility-card__body">In Webforms Form Config → Form library, export the edited form for draft push. Open Northern Health UAT Form Settings, choose the package here, then review and create new draft copies. Linked child forms are created first.</p>
+  <label for="form-draft-package">Webforms draft-deployment JSON</label>
+  <input id="form-draft-package" type="file" accept=".json">
+  <button id="review-form-drafts" type="button" class="button button--secondary" disabled>Review draft push</button>
+  <div id="form-draft-plan" class="utility-card__body"></div>
+  <label><input id="confirm-form-drafts" type="checkbox" disabled> Create the reviewed draft copies in Northern Health UAT</label>
+  <button id="push-form-drafts" type="button" class="button button--primary" disabled>Create draft copies</button>
+  <button id="refresh-form-draft-receipt" type="button" class="button button--secondary" disabled>Refresh deployment receipt</button>
+  <button id="download-form-draft-receipt" type="button" class="button button--secondary" disabled>Download receipt</button>
+  <p id="form-draft-status" class="utility-card__body" role="status" aria-live="polite">Draft creation requires your signed-in Chrome session. Source changes and unsupported references stop the push. Publication remains in AlayaCare.</p>
+</section>
+  <div class="utility-card">
     <h3 class="utility-card__title">Manual tenant snapshot</h3>
     <p class="utility-card__body">
       Reads form-context fields, profile attributes, and supported option lists

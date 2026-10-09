@@ -21,6 +21,12 @@ export async function dispatchSessionMessage(
   hooks: SessionDispatchHooks = {}
 ): Promise<CommandResult<ContentCommandData>> {
   switch (message.type) {
+    case "ac/content/preview-form-drafts":
+      return { ok: true, data: await client.previewFormDrafts(message.payload.package) };
+    case "ac/content/push-form-drafts":
+      return { ok: true, data: await client.pushFormDrafts(message.payload.package, message.payload.approvedDigest) };
+    case "ac/content/get-form-draft-receipt":
+      return { ok: true, data: await client.getFormDraftReceipt(message.payload.packageId) };
     case "ac/content/get-status":
       return { ok: true, data: await client.getStatus() };
     case "ac/content/open-day-view":
@@ -33,6 +39,10 @@ export async function dispatchSessionMessage(
       return { ok: true, data: await client.postAvailability(message.payload) };
     case "ac/content/export-form-context-catalog":
       return { ok: true, data: await client.exportFormContextCatalog() };
+    case "ac/content/list-form-definitions":
+      return { ok: true, data: await client.listFormDefinitions(message.payload) };
+    case "ac/content/export-form-definitions":
+      return { ok: true, data: await client.exportFormDefinitions(message.payload) };
     case "ac/content/search-client-charts":
       return {
         ok: true,

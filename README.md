@@ -61,6 +61,38 @@ Day View overlay and the page button need an AlayaCare tab).
 
 The CSV and Excel exports follow the maintained reference columns from `SubSubSection` through `Note`. Both merge current Patient binding labels and types with the committed documentation annotations, keep annotation-only chart fields, and append new live Patient fields with blank documentation cells for review. The Excel workbook additionally highlights those review rows and includes frozen headers, filters, wrapped text, readable column sizing, and alternating row shading.
 
+### Export form definitions for Webforms
+
+In **Field Catalog → Forms for Webforms**, load the form list and export one
+form, or choose **Export all forms (with subforms)**. This currently supports
+Northern Health UAT, using your signed-in session and definition GET routes.
+Archived forms are included by default; older versions are optional (up to 200
+per schema). Linked child forms are followed recursively. Captures record
+hashes, dependencies, exclusions and failures; partial coverage is explicit.
+
+Open the resulting JSON in Webforms via **Import file** or **Form Config → Form
+library**. Webforms reconstructs basic linked subforms as repeating field groups
+and retains unsupported controls with warnings. The library can re-export the
+capture. These controls do not push edited definitions into AlayaCare.
+Patient submissions, chart data, document templates and author identities are
+excluded. No extension permissions are added by this feature.
+
+The shared capture core is vendored from the sibling Webforms repository:
+`node scripts/sync-webforms-capture.mjs [webforms-path]`. Test it with
+`node --test packages/ac-core/src/shared/capture.test.mjs` and
+`node scripts/test-form-definitions.mjs`; then run the normal build. Webforms'
+`tools/alayacare-bridge/package-actools.mjs` builds a downloadable extension ZIP.
+
+Webforms can now refresh just its sidebar dropdown catalogs using **AlayaCare
+Export → Tenant dropdown choices → Refresh choices from ACtools**. Reload this
+updated extension and Webforms, then open one signed-in NH UAT Form Settings tab
+in the same Chrome profile as Webforms on localhost:3000. This fixed read-only
+relay returns the existing role/category/profile/note-type/clinical catalogs,
+without full form export, patient data or permission bodies. Its catalog-only
+snapshot is hash-checked and saved separately from forms and edited subforms.
+Full-capture and catalog-only file import remain available in Webforms. Other
+tenant file imports do not widen the live relay's NH UAT restriction.
+
 ### Inspect a synthetic UAT client chart
 
 This workspace is off by default. Turn on **Structured client snapshot** in
@@ -239,3 +271,30 @@ This syncs `public/manifest.json` to the version in `package.json`, runs the pro
 - `releases/ac-tools-v<version>.zip` — the versioned release archive.
 
 The script shells out to the system `zip` command, which is preinstalled on macOS, Linux, and the GitHub Actions Ubuntu runner. On Windows, run it from WSL or install a `zip` binary.
+
+### Push edited Webforms definitions as drafts
+
+In Webforms **Form Config → Form library**, export the edited form for draft
+push. In AC Tools **Field Catalog → Push edited forms from Webforms**, select
+the JSON package, review the source baselines and planned copies, then confirm
+and create drafts. Open NH UAT Form Settings in the signed-in Chrome profile.
+The bridge creates linked children first, remaps native IDs, applies rules, and
+reads each draft back. It preserves a durable receipt with partial failures and
+prevents automatic replay. Refresh/download the receipt after a panel closes.
+Publication stays in AlayaCare; existing forms are not overwritten.
+
+This path is pinned to Northern Health UAT and uses the application's native
+AJAX session handling through a narrow MAIN-world bridge. No permissions were
+added. The desktop host requires its own native transport/store before writes
+are available. Weighted and single-question scores are blocked before creation;
+other unsupported controls and lost rules must be resolved in Webforms.
+
+```sh
+node scripts/test-form-definitions.mjs
+node scripts/test-form-drafts.mjs
+node --test packages/ac-core/src/shared/capture.test.mjs packages/ac-core/src/shared/deployment.test.mjs
+```
+
+Synthetic edited parent/child forms and simple sum/display-rule fixtures passed
+native NH UAT read-back on 2026-10-08. The compiled MAIN and isolated-world
+transport was exercised in Chrome; the installed panel flow is not yet tested.

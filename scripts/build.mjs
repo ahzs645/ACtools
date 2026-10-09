@@ -38,6 +38,8 @@ const contentOptions = {
   target: "chrome120"
 };
 
+const draftOptions = { ...contentOptions, entryPoints: [resolve(rootDir, "src/content/form-deployment-main.ts")], outfile: resolve(rootDir, "dist/form-deployment-main.js") };
+
 async function run() {
   if (isWatchMode) {
     await viteBuild({
@@ -47,18 +49,19 @@ async function run() {
       }
     });
 
-    const [backgroundContext, contentContext] = await Promise.all([
+    const [backgroundContext, contentContext, draftContext] = await Promise.all([
       esbuildContext(backgroundOptions),
-      esbuildContext(contentOptions)
+      esbuildContext(contentOptions),
+      esbuildContext(draftOptions)
     ]);
 
-    await Promise.all([backgroundContext.watch(), contentContext.watch()]);
+    await Promise.all([backgroundContext.watch(), contentContext.watch(), draftContext.watch()]);
     console.log("Watching popup, background, and content builds...");
     return;
   }
 
   await viteBuild(popupConfig);
-  await Promise.all([esbuildBuild(backgroundOptions), esbuildBuild(contentOptions)]);
+  await Promise.all([esbuildBuild(backgroundOptions), esbuildBuild(contentOptions), esbuildBuild(draftOptions)]);
 
   // Fails the build if the assembled HTML no longer satisfies the selectors the
   // popup resolves at load time. Exits non-zero on its own.

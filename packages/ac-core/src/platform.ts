@@ -34,6 +34,10 @@ export interface CorePlatform {
  * session, whose cookies the host attaches to every request.
  */
 export interface SessionContext {
+  /** Native form editor transport, supplied by the Chrome MAIN-world bridge. */
+  formDraftRequest?(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<unknown>;
+  /** Durable checkpoints prevent replay after a popup or worker restart. */
+  formDraftStore?: KeyValueStore;
   /** Tenant origin, e.g. `https://example.uat.alayacare.ca`. */
   readonly origin: string;
   /** Current page URL. Read lazily because hash routes change without a reload. */

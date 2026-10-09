@@ -1,4 +1,7 @@
+import { previewDraftDeployment, executeDraftDeployment, type DraftDeploymentReceipt } from "../shared/deployment.mjs";
 import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../shared/messages";
+import { UAT_ORIGIN, loadFormIndex, captureDefinitions, type DefinitionCapture, type FormListEntry, type CaptureScope, type DefinitionCaptureRequest } from "../shared/capture.mjs";
+import { captureTenantCatalog } from '../shared/tenant-catalog.mjs';
 import type {
   EmployeeDetail,
   EmployeeListRequest,
@@ -525,6 +528,56 @@ export class AlayaCareClient {
       configuration,
       countries
     });
+  }
+
+  private pushingFormDrafts = false;
+  private assertFormDraftAccess() {
+    if (this.context.origin !== UAT_ORIGIN || !new URL(this.context.getHref()).hash.startsWith("#/system-settings/forms")) throw new Error("Open Northern Health UAT Form Settings before reviewing or pushing drafts.");
+  }
+  async previewFormDrafts(value: unknown) {
+    this.assertFormDraftAccess();
+    return previewDraftDeployment(value, path => this.readFormDefinition(path));
+  }
+  async getFormDraftReceipt(packageId: string): Promise<DraftDeploymentReceipt | undefined> {
+    this.assertFormDraftAccess();
+    if (!/^[\w.:-]{1,160}$/.test(packageId)) throw new Error("Invalid package ID.");
+    return this.context.formDraftStore?.get<DraftDeploymentReceipt>(`ac-tools-form-draft-receipt:${packageId}`);
+  }
+  async pushFormDrafts(value: unknown, approvedDigest: string) {
+    this.assertFormDraftAccess();
+    const request = this.context.formDraftRequest, store = this.context.formDraftStore;
+    if (!request || !store) throw new Error("Draft push requires the rebuilt AC Tools Chrome extension and durable receipt storage.");
+    if (this.pushingFormDrafts) throw new Error("A draft push is already running. Check its receipt.");
+    this.pushingFormDrafts = true;
+    try {
+      return await executeDraftDeployment(value, approvedDigest, {
+        request: async (method, path, body) => { this.assertFormDraftAccess(); return request(method,path,body); },
+        load: id => store.get<DraftDeploymentReceipt>(`ac-tools-form-draft-receipt:${id}`),
+        save: (id,receipt) => store.set(`ac-tools-form-draft-receipt:${id}`,receipt)
+      });
+    } finally { this.pushingFormDrafts = false; }
+  }
+
+  private async readFormDefinition(path: string): Promise<unknown> {
+    const response = await this.context.fetch(this.absolute(path), { method: "GET", credentials: "include", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(30_000) });
+    if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) throw new Error("Could not read a form definition. Check your UAT login.");
+    return response.json();
+  }
+
+  async listFormDefinitions(options: CaptureScope = {}): Promise<FormListEntry[]> {
+    if (this.context.origin !== UAT_ORIGIN) throw new Error("Form-definition capture is currently verified only for Northern Health UAT.");
+    return loadFormIndex(path => this.readFormDefinition(path), options);
+  }
+  async refreshTenantCatalog() {
+    this.assertFormDraftAccess();
+    return captureTenantCatalog(path => this.readFormDefinition(path));
+  }
+
+  async exportFormDefinitions(request: DefinitionCaptureRequest): Promise<DefinitionCapture> {
+    if (this.context.origin !== UAT_ORIGIN) throw new Error("Form-definition capture is currently verified only for Northern Health UAT.");
+    if (request.formIds !== undefined && (!Array.isArray(request.formIds) || request.formIds.length > 1000)) throw new Error("Invalid form selection.");
+    const ids = request.formIds ?? (await this.listFormDefinitions(request)).map(form => form.id);
+    return captureDefinitions(ids, path => this.readFormDefinition(path), undefined, request);
   }
 
   async searchClientCharts(
