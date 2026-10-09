@@ -1,6 +1,6 @@
 {
   "name": "ac-tools-desktop",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "AC Tools as a desktop app: the same side panel and core, with a signed-in tenant session and an API-key pathway, outside the browser.",
   "author": {

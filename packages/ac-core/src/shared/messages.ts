@@ -1,3 +1,4 @@
+import type { DocumentAction, DocumentResult } from './documents.mjs';
 import type { DraftDeploymentPreview, DraftDeploymentReceipt } from "./deployment.mjs";
 import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
 import type { DefinitionCapture, FormListEntry, DefinitionCaptureRequest, CaptureScope } from "./capture.mjs";
@@ -94,6 +95,8 @@ export interface DesktopSessionState {
 }
 
 export type RuntimeMessage =
+  | {type:"ac/popup/form-documents";payload:DocumentAction}
+  | {type:"ac/content/form-documents";payload:DocumentAction}
   | { type: "ac/popup/preview-form-drafts"; payload: { package: unknown } }
   | { type: "ac/content/preview-form-drafts"; payload: { package: unknown } }
   | { type: "ac/popup/push-form-drafts"; payload: { package: unknown; approvedDigest: string } }
@@ -335,6 +338,7 @@ export type RuntimeMessage =
     };
 
 export type ContentCommandData =
+  | DocumentResult
   | DraftDeploymentPreview
   | DraftDeploymentReceipt
   | DefinitionCapture

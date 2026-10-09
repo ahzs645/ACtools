@@ -93,6 +93,40 @@ snapshot is hash-checked and saved separately from forms and edited subforms.
 Full-capture and catalog-only file import remain available in Webforms. Other
 tenant file imports do not widen the live relay's NH UAT restriction.
 
+### Word templates and child PDF batches
+
+In Webforms **Form Config → Form library**, use **Export draft push with Word
+templates** to include default templates for the parent and linked child forms
+in the deployment JSON. In **Field Catalog → Push edited forms from Webforms**,
+review and create the draft copies, then choose **Upload packaged templates**.
+Uploads use the new verified form IDs from the deployment receipt. Review and
+publish in AlayaCare before using the forms for submissions.
+
+**Word templates and child PDFs** also uploads an individual `.docx` to an
+existing native form. Open NH UAT Form Settings, enter its numeric form ID, load
+its templates, choose the Word file and upload. Its native schema UUID is resolved
+automatically. Keep the original field tags; uploads leave defaults unchanged.
+
+For a submitted parent, enter the parent submission ID, review its direct child
+entries, select a template per entry and generate the batch. Refresh existing PDF
+jobs to get completed links. The standard parent PDF includes all child entries;
+a custom child template produces a separate PDF per entry. At most 200 direct
+entries are reviewed. Nested entries need a separate review. These controls do
+not merge PDFs, export answer records, or change approval, signing or publication.
+
+Document receipts retain operation, template and job IDs. They are saved before
+uploads/job starts; uncertain operations are not replayed. After an interruption,
+refresh the displayed receipt ID and inspect native state before starting a new
+operation. The last operation ID and packaged-upload IDs survive panel closure.
+Definition archives still exclude submissions and templates. Printing reads
+submission metadata only for the requested workflow; answer values are not sent
+to the panel.
+
+Verification: `node --test packages/ac-core/src/shared/documents.test.mjs`,
+`node scripts/test-form-documents.mjs`, and
+`node scripts/test-form-documents-ui.mjs`. Native UAT testing verified an upload
+and two child PDFs. Reload the rebuilt extension to expose the new controls.
+
 ### Inspect a synthetic UAT client chart
 
 This workspace is off by default. Turn on **Structured client snapshot** in

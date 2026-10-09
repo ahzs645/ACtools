@@ -1,3 +1,4 @@
+import { inspectFormTemplates, uploadFormTemplate, reviewChildPrint, startChildPrintBatch, refreshDocumentReceipt, type DocumentAction, type DocumentIO, type DocumentReceipt } from '../shared/documents.mjs';
 import { previewDraftDeployment, executeDraftDeployment, type DraftDeploymentReceipt } from "../shared/deployment.mjs";
 import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../shared/messages";
 import { UAT_ORIGIN, loadFormIndex, captureDefinitions, type DefinitionCapture, type FormListEntry, type CaptureScope, type DefinitionCaptureRequest } from "../shared/capture.mjs";
@@ -530,6 +531,27 @@ export class AlayaCareClient {
     });
   }
 
+  private documentOperation = false;
+  async formDocuments(input: DocumentAction) {
+    const hash=new URL(this.context.getHref()).hash;
+    if(this.context.origin!==UAT_ORIGIN || !hash.startsWith('#/system-settings/forms') && !/^#\/dashboard\/client-forms\/[1-9][0-9]*(?:$|[?])/.test(hash)) throw new Error('Open Northern Health UAT Form Settings or a form submission.');
+    if(input.action==='upload' && !hash.startsWith('#/system-settings/forms')) throw new Error('Open Form Settings to upload a template.');
+    const request=this.context.formDraftRequest,store=this.context.formDraftStore;
+    if(!request || !store) throw new Error('Document tools require the rebuilt Chrome extension and durable receipt storage.');
+    if(this.documentOperation) throw new Error('A document operation is already running. Inspect its receipt.');
+    this.documentOperation=true;
+    const io:DocumentIO={request,load:id=>store.get<DocumentReceipt>(`ac-tools-document-receipt:${id}`),save:(id,receipt)=>store.set(`ac-tools-document-receipt:${id}`,receipt)};
+    try {
+      switch(input.action) {
+        case 'templates':return await inspectFormTemplates(input.formId,request);
+        case 'upload':return await uploadFormTemplate(input,io);
+        case 'review-print':return await reviewChildPrint(input.parentSubmissionId,request);
+        case 'start-print':return await startChildPrintBatch(input,io);
+        case 'receipt':return await refreshDocumentReceipt(input.operationId,io);
+        default:throw new Error('Unknown document operation.');
+      }
+    } finally {this.documentOperation=false;}
+  }
   private pushingFormDrafts = false;
   private assertFormDraftAccess() {
     if (this.context.origin !== UAT_ORIGIN || !new URL(this.context.getHref()).hash.startsWith("#/system-settings/forms")) throw new Error("Open Northern Health UAT Form Settings before reviewing or pushing drafts.");

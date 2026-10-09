@@ -21,6 +21,8 @@ export async function dispatchSessionMessage(
   hooks: SessionDispatchHooks = {}
 ): Promise<CommandResult<ContentCommandData>> {
   switch (message.type) {
+    case "ac/content/form-documents":
+      return {ok:true,data:await client.formDocuments(message.payload)};
     case "ac/content/preview-form-drafts":
       return { ok: true, data: await client.previewFormDrafts(message.payload.package) };
     case "ac/content/push-form-drafts":

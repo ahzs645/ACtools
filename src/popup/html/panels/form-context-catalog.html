@@ -23,10 +23,33 @@
   <div id="form-draft-plan" class="utility-card__body"></div>
   <label><input id="confirm-form-drafts" type="checkbox" disabled> Create the reviewed draft copies in Northern Health UAT</label>
   <button id="push-form-drafts" type="button" class="button button--primary" disabled>Create draft copies</button>
+  <button id="upload-packaged-templates" type="button" class="button button--secondary" disabled>Upload packaged templates</button>
   <button id="refresh-form-draft-receipt" type="button" class="button button--secondary" disabled>Refresh deployment receipt</button>
   <button id="download-form-draft-receipt" type="button" class="button button--secondary" disabled>Download receipt</button>
   <p id="form-draft-status" class="utility-card__body" role="status" aria-live="polite">Draft creation requires your signed-in Chrome session. Source changes and unsupported references stop the push. Publication remains in AlayaCare.</p>
 </section>
+  <section class="utility-card">
+    <h3 class="utility-card__title">Word templates and child PDFs</h3>
+    <p class="utility-card__body">Upload a Word template to an existing form in NH UAT Form Settings. Preserve its field tags. For child printing, enter the parent submission ID and review its direct child entries. Each entry gets a separate native PDF; the standard parent PDF includes all entries.</p>
+    <label for="document-form-id">Native form ID</label>
+    <input class="input" id="document-form-id" type="number" min="1" step="1">
+    <button id="load-document-templates" type="button" class="button button--secondary">Load form templates</button>
+    <p id="document-template-target" class="utility-card__body"></p>
+    <label for="document-template-file">Word template</label>
+    <input class="input" id="document-template-file" type="file" accept=".docx">
+    <button id="upload-document-template" type="button" class="button button--primary" disabled>Upload to selected form</button>
+    <label for="document-parent-submission">Parent submission ID</label>
+    <input class="input" id="document-parent-submission" type="number" min="1" step="1">
+    <button id="review-child-print" type="button" class="button button--secondary">Review child entries</button>
+    <div id="child-print-plan" class="utility-card__body"></div>
+    <button id="start-child-print" type="button" class="button button--primary" disabled>Generate reviewed child PDFs</button>
+    <label for="document-operation-id">Document receipt ID</label>
+    <input class="input" id="document-operation-id" type="text">
+    <button id="refresh-document-receipt" type="button" class="button button--secondary">Refresh PDF jobs or upload receipt</button>
+    <button id="download-document-receipt" type="button" class="button button--secondary" disabled>Download document receipt</button>
+    <div id="document-print-results" class="utility-card__body"></div>
+    <p id="document-status" class="utility-card__body" role="status" aria-live="polite">Uses the signed-in UAT session. No approval, signing or publication changes are made.</p>
+  </section>
   <div class="utility-card">
     <h3 class="utility-card__title">Manual tenant snapshot</h3>
     <p class="utility-card__body">

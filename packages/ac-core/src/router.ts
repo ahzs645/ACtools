@@ -12,6 +12,7 @@ export type PopupMessage = Extract<RuntimeMessage, { type: `ac/popup/${string}` 
  * the `ac/content/*` command of the same name and payload.
  */
 export const SESSION_FORWARDED_COMMANDS = new Set<string>([
+  "ac/popup/form-documents",
   "ac/popup/preview-form-drafts",
   "ac/popup/push-form-drafts",
   "ac/popup/get-form-draft-receipt",
@@ -69,6 +70,7 @@ export interface PopupRouter {
  */
 export function createPopupRouter(deps: PopupRouterDeps): PopupRouter {
   let pushingDrafts = false;
+  let documentOperation = false;
   const employees = new EmployeeService(deps.platform);
   const environments = employees.environments;
 
@@ -98,6 +100,11 @@ export function createPopupRouter(deps: PopupRouterDeps): PopupRouter {
         ...message,
         type: message.type.replace("ac/popup/", "ac/content/")
       } as SessionMessage;
+      if (message.type === "ac/popup/form-documents") {
+        if (documentOperation) return {ok:false,error:"A document operation is already running. Inspect its receipt."};
+        documentOperation=true;
+        try {return await deps.sendSessionMessage(forwarded);} finally {documentOperation=false;}
+      }
       if (message.type !== "ac/popup/push-form-drafts") return deps.sendSessionMessage(forwarded);
       if (pushingDrafts) return { ok: false, error: "A draft push is already running. Check its receipt." };
       pushingDrafts = true;
