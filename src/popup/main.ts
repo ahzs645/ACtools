@@ -1,3 +1,5 @@
+import { FormContextController } from './features/formDefinitions/formContextController';
+import { InterfaceCaptureController } from "./features/interfaceCapture/controller";
 import { FormDocumentsController } from './features/formDefinitions/documentsController';
 import { FormDeploymentController } from "./features/formDefinitions/deploymentController";
 import "./styles.css";
@@ -122,9 +124,11 @@ const environmentManager = new EnvironmentManagerController(async () => {
 });
 const connectorUtilities = new ConnectorUtilitiesController();
 const shiftLab = new ShiftLabController();
+new InterfaceCaptureController(downloadFile);
 new FormDefinitionsController({ send: sendRuntimeMessage, download: downloadFile });
 new FormDocumentsController({ send: sendRuntimeMessage, download: downloadFile });
 new FormDeploymentController({ send: sendRuntimeMessage, download: downloadFile });
+new FormContextController({ send: sendRuntimeMessage, download: downloadFile });
 const employeeCopyController = new EmployeeCopyController({
   getEmployee: () => selectedEmployee
     ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }

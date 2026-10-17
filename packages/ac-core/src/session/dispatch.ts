@@ -21,6 +21,10 @@ export async function dispatchSessionMessage(
   hooks: SessionDispatchHooks = {}
 ): Promise<CommandResult<ContentCommandData>> {
   switch (message.type) {
+    case 'ac/content/capture-form-context': return {ok:true,data:await client.captureFormContext()};
+    case 'ac/content/preview-form-context': return {ok:true,data:await client.previewFormContext(message.payload.package)};
+    case 'ac/content/apply-form-context': return {ok:true,data:await client.applyFormContext(message.payload.package,message.payload.approvedDigest)};
+    case 'ac/content/form-context-receipt': return {ok:true,data:await client.formContextReceipt(message.payload.digest)};
     case "ac/content/form-documents":
       return {ok:true,data:await client.formDocuments(message.payload)};
     case "ac/content/preview-form-drafts":

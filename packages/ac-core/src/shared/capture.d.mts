@@ -19,7 +19,7 @@ export interface DefinitionCapture {
   tenantConfiguration?:TenantConfiguration;tenantConfigurationSha256?:string;
 }
 export const TENANT_CONFIGURATION_PATHS:string[];
-export function captureTenantConfiguration(read:(path:string)=>Promise<any>):Promise<TenantConfiguration>;
+export function captureTenantConfiguration(read:(path:string)=>Promise<unknown>):Promise<TenantConfiguration>;
 export function formId(value: unknown): number;
 export function indexPath(page?: number, options?: CaptureScope): string;
 export function versionsPath(schemaId: string): string;

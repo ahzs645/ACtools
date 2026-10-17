@@ -11,8 +11,8 @@ export function sourceSnapshot(value:Record<string,unknown>):Record<string,unkno
 export function remapLogic(value:unknown,mapping:Record<number,number>):unknown;
 export function parseDraftDeployment(value:unknown):DraftDeployment;
 export function orderedDeploymentForms(value:DraftDeployment):DraftDeployment['forms'];
-export function previewDraftDeployment(value:unknown,read:(path:string)=>Promise<any>):Promise<DraftDeploymentPreview>;
-export function executeDraftDeployment(value:unknown,approvedDigest:string,io:{request:(method:'GET'|'POST'|'PUT',path:string,body?:unknown)=>Promise<any>;load:(id:string)=>Promise<DraftDeploymentReceipt|undefined>;save:(id:string,receipt:DraftDeploymentReceipt)=>Promise<void>}):Promise<DraftDeploymentReceipt>;
+export function previewDraftDeployment(value:unknown,read:(path:string)=>Promise<unknown>):Promise<DraftDeploymentPreview>;
+export function executeDraftDeployment(value:unknown,approvedDigest:string,io:{request:(method:'GET'|'POST'|'PUT',path:string,body?:unknown)=>Promise<unknown>;load:(id:string)=>Promise<DraftDeploymentReceipt|undefined>;save:(id:string,receipt:DraftDeploymentReceipt)=>Promise<void>}):Promise<DraftDeploymentReceipt>;
 
 export function nativeScoreGraphProblems(fields: Array<{id: string | number; field_type:string;settings?:{linked_field_ids?:Array<string|number>}|null}>):Array<{fieldId:string|number;reason:string}>;
 export interface NativeScoreFormulaField {id:string|number;field_type:string;settings?:Record<string,unknown>|null}

@@ -17,6 +17,7 @@ export class DayViewOverlay {
   constructor(private readonly client: AlayaCareClient) {
     this.host = document.createElement("div");
     this.host.id = "ac-tools-overlay-root";
+    this.host.dataset.acToolsUi = "day-view";
     this.shadowRoot = this.host.attachShadow({ mode: "open" });
     document.body.appendChild(this.host);
   }

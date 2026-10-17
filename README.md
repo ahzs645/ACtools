@@ -332,3 +332,37 @@ node --test packages/ac-core/src/shared/capture.test.mjs packages/ac-core/src/sh
 Synthetic edited parent/child forms and simple sum/display-rule fixtures passed
 native NH UAT read-back on 2026-10-08. The compiled MAIN and isolated-world
 transport was exercised in Chrome; the installed panel flow is not yet tested.
+
+### Offline AlayaCare interface evidence (0.7.4)
+
+Form Context / Catalog includes **Interface archive**. In the signed-in tenant,
+choose **Capture discovered routes**, then **Export Webforms update bundle
+(.zip)**. Discovery follows visible/hidden navigation anchors and, by default,
+previously observed platform routes from the shared evidence catalog. It tries
+up to 300 routes in a temporary inactive tab and reports captured, redirected,
+failed and pending routes. Stop retains collected evidence.
+
+The ZIP contains the interface contract, coverage report, source asset manifest,
+observed tenant/CDN JS/CSS as text evidence with SHA-256 hashes, and optional
+baseline comparison. Webforms accepts the ZIP under AlayaCare Help / Surface
+coverage → Interface archive. Load a previous archive to compare changes and
+export a site-update review to guide simulator implementation. Missing states
+are reported rather than counted as a pass. JSON/gzip export remains available.
+
+Reviewed dialog exploration and current-chart navigation are enabled by default. Capture dialogs on this page also opens the exact reviewed dialog recipes without submitting them, retaining picker, focus and Escape states. When Escape closes the parent, it reopens the reviewed dialog for the next picker. Already-open dialogs are left unchanged. Import Form uses a native OS chooser and is reported as skipped; the local simulator handles fixture imports.
+
+Start/stop recording while opening other menus and dialogs to include those states. Captures omit entered values, directory choices and table record
+text; verified static Task Status/Priority options are retained. Optional
+screenshots may include visible information and are off by default. The walker
+does not submit forms. Unrendered/permission-gated routes, record charts and lazy
+dialogs cannot all be discovered automatically. Importing evidence does not
+infer vendor server behavior. Webforms runs recorded transitions and synthetic answers locally, and connects known routes to its existing chart engine. Unobserved actions remain unavailable. ACtools controls and day-view overlays are excluded from structure and hidden temporarily for optional screenshots. Archives are checkpointed locally for the same tenant (6 MB compressed limit); quota failures are shown and downloads remain the durable historical record.
+
+Observed source downloads allow only tenant-origin JS/CSS and the native
+AlayaCare frontend CDN. Other origins, unopened lazy modules and failed CORS
+downloads remain outside coverage. Vendor source is never executed by the viewer.
+
+Run `node --test scripts/test-interface-capture.mjs` for the controller's mocked
+Chrome/DOM tests and `node --test packages/ac-core/src/shared/interface-capture.test.mjs`
+for the shared format checks. Webforms is the source of the shared modules;
+update them with `node scripts/sync-webforms-capture.mjs` before building.

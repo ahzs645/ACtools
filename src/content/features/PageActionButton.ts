@@ -92,6 +92,7 @@ export class PageActionButton {
     button.type = "button";
     button.className = "ac-tools-button";
     button.dataset.acToolsButton = "true";
+    button.dataset.acToolsUi = "page-action";
     button.setAttribute("aria-label", "Open AC Tools");
     button.innerHTML = `
       <span class="ac-tools-button__icon" aria-hidden="true">

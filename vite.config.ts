@@ -13,13 +13,14 @@ export default defineConfig({
       "@ac-core": resolve(__dirname, "packages/ac-core/src")
     }
   },
-  plugins: [htmlInclude({ root: __dirname, entries: ["sidepanel.html"] })],
+  plugins: [htmlInclude({ root: __dirname, entries: ["sidepanel.html", "interface-capture.html"] })],
   build: {
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        sidepanel: resolve(__dirname, "sidepanel.html")
+        sidepanel: resolve(__dirname, "sidepanel.html"),
+        interfaceCapture: resolve(__dirname, "interface-capture.html")
       },
       output: {
         entryFileNames: "assets/[name]-[hash].js",

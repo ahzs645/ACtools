@@ -1,3 +1,4 @@
+import { captureFormContextArchive, previewFormContextDeployment, executeFormContextDeployment, readFormContextReceipt, type FormContextIO } from '../shared/form-context.mjs';
 import { inspectFormTemplates, uploadFormTemplate, reviewChildPrint, startChildPrintBatch, refreshDocumentReceipt, type DocumentAction, type DocumentIO, type DocumentReceipt } from '../shared/documents.mjs';
 import { previewDraftDeployment, executeDraftDeployment, type DraftDeploymentReceipt } from "../shared/deployment.mjs";
 import type { AvailabilityDraft, AvailabilityPostResult, PageStatus } from "../shared/messages";
@@ -509,6 +510,22 @@ export class AlayaCareClient {
     }
     return { taskId, name, cloneStatus: createResponse.status, assignStatus: assignResponse.status };
   }
+
+  private formContextOperation = false;
+  private formContextIO(): FormContextIO {
+    if (this.context.origin !== UAT_ORIGIN || !new URL(this.context.getHref()).hash.startsWith('#/system-settings/form-context')) throw new Error('Open Northern Health UAT Form Context before reviewing or applying configuration.');
+    const request = this.context.formDraftRequest, store = this.context.formDraftStore;
+    if (!request || !store) throw new Error('Configuration writes require the rebuilt extension and durable receipt storage.');
+    return {sourceOrigin:this.context.origin,read:path=>this.fetchJson<unknown>(path),request:(method,path,body)=>request(method,path,body),store};
+  }
+  async captureFormContext() { return captureFormContextArchive(path=>this.fetchJson<unknown>(path),this.context.origin); }
+  async previewFormContext(packageValue:unknown) { return previewFormContextDeployment(packageValue,this.formContextIO()); }
+  async applyFormContext(packageValue:unknown,approvedDigest:string) {
+    if(this.formContextOperation) throw new Error('A Form Context deployment is already running. Check its receipt.');
+    this.formContextOperation=true;
+    try { return await executeFormContextDeployment(packageValue,approvedDigest,this.formContextIO()); } finally { this.formContextOperation=false; }
+  }
+  async formContextReceipt(digest:string) { return readFormContextReceipt(digest,this.formContextIO()); }
 
   async exportFormContextCatalog(): Promise<AlayaCareFormContextCatalogSnapshot> {
     const [contexts, fields, profileAttributes, configuration, countries] = await Promise.all([

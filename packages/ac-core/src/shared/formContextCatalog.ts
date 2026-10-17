@@ -21,6 +21,9 @@ export interface AlayaCareCatalogField {
   normalizedType: string;
   sortOrder: number | null;
   options: AlayaCareCatalogOption[];
+  /** Raw configuration metadata from the catalog read; full-coverage status belongs to the standalone Form Context archive. */
+  nativeDefinition?: Record<string, unknown>;
+  nativeContextOverride?: Record<string, unknown>;
 }
 
 export interface AlayaCareFormContextCatalogSnapshot {
@@ -72,7 +75,7 @@ export function buildAlayaCareFormContextCatalog(
   const profileAttributeByTag = new Map<string, Record<string, unknown>>();
 
   contexts.forEach((context) => {
-    const id = readIdentifier(context.id);
+    const id = readIdentifier(context.id) ?? readString(context.context) ?? readString(context.name);
     if (id) contextById.set(id, context);
   });
   profileAttributes.forEach((attribute) => {
@@ -94,7 +97,7 @@ export function buildAlayaCareFormContextCatalog(
         readString(nestedValue(assignment.context, "name")) ??
         readString(assignment.context) ??
         readString(assignment.context_name) ??
-        readString(contextRecord?.name) ??
+        readString(contextRecord?.name) ?? readString(contextRecord?.context) ??
         "Unknown";
       const contextLabel =
         readString(nestedValue(assignment.context, "label")) ??
@@ -136,7 +139,9 @@ export function buildAlayaCareFormContextCatalog(
         profileInputType,
         normalizedType: normalizeFieldType(nativeType),
         sortOrder: readNumber(assignment.sort_order) ?? readNumber(field.sort_order),
-        options
+        options,
+        nativeDefinition: structuredClone(field),
+        nativeContextOverride: structuredClone(assignment)
       } satisfies AlayaCareCatalogField;
     });
   });

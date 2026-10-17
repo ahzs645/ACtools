@@ -2808,3 +2808,9 @@ html[data-surface="desktop"] .settings-section--surface {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* A persistent full-tab capture workspace does not compete with native page UI. */
+.capture-workspace { max-width: 1100px; margin: 32px auto; padding: 0 24px 48px; }
+.capture-workspace > h1 { font-size: 24px; margin-bottom: 8px; }
+.capture-workspace > p { margin-bottom: 20px; }
+.capture-workspace .utility-card > label { display: block; margin: 12px 0 6px; }
+.capture-workspace .utility-card > button { margin: 8px 8px 8px 0; }

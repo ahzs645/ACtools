@@ -5,7 +5,7 @@ export interface ChildPrintReview {parentSubmissionId:number;digest:string;entri
 export interface DocumentReceipt {operationId:string;kind:'upload'|'print';status:'running'|'partial'|'verified';errors:string[];formId?:number;schemaId?:string;fileName?:string;templateId?:number;parentSubmissionId?:number;jobs?:Array<{submissionId:number;formId:number;templateId:number;jobId?:string;status:string;url?:string}>}
 export type DocumentAction = {action:'templates';formId:number}|{action:'upload';operationId:string;formId:number;schemaId:string;fileName:string;base64:string}|{action:'review-print';parentSubmissionId:number}|{action:'start-print';operationId:string;parentSubmissionId:number;digest:string;choices:Array<{submissionId:number;templateId:number}>}|{action:'receipt';operationId:string};
 export type DocumentResult=FormTemplates|ChildPrintReview|DocumentReceipt|undefined;
-export type DocumentRequest=(method:'GET'|'POST'|'PUT',path:string,body?:unknown)=>Promise<any>;
+export type DocumentRequest=(method:'GET'|'POST'|'PUT',path:string,body?:unknown)=>Promise<unknown>;
 export interface DocumentIO {request:DocumentRequest;load:(id:string)=>Promise<DocumentReceipt|undefined>;save:(id:string,receipt:DocumentReceipt)=>Promise<void>}
 export function requireDocumentId(value:unknown):number;
 export function templateListPath(schemaId:string):string;

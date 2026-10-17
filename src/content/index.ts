@@ -1,3 +1,4 @@
+import "./interface-capture";
 import type { CommandResult } from "@ac-core/shared/messages";
 import { isContentMessage, isRuntimeMessage } from "@ac-core/shared/messages";
 import { formatError } from "@ac-core/shared/errors";

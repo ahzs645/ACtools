@@ -1,4 +1,21 @@
 <div id="panel-form-context-catalog" class="tool-panel">
+<section class="utility-card">
+<h3 class="utility-card__title">Complete Form Context configuration</h3>
+<p class="utility-card__body">Capture raw field definitions, every assigned module override, roles, input types and families. Import the archive into Webforms to author new context fields. This is separate from the normalized field catalog below. Unknown configuration keys are preserved; incomplete captures cannot prepare a deployment.</p>
+<button id="capture-full-form-context" type="button" class="button button--primary">Export full Form Context archive</button>
+<label for="form-context-deployment-file">Webforms create-only context deployment</label>
+<input id="form-context-deployment-file" type="file" accept=".json">
+<label for="form-context-deployment-json">Or paste the deployment JSON</label>
+<textarea id="form-context-deployment-json" class="input" rows="5" placeholder="Paste the create-only deployment exported by Webforms"></textarea>
+<button id="load-form-context-deployment-json" type="button" class="button button--secondary">Load pasted deployment</button>
+<button id="review-form-context" type="button" class="button button--secondary" disabled>Review new context fields</button>
+<div id="form-context-deployment-plan" class="utility-card__body"></div>
+<label><input id="confirm-form-context" type="checkbox" disabled> Create the reviewed new fields and module mappings in Northern Health UAT</label>
+<button id="apply-form-context" type="button" class="button button--primary" disabled>Create new context fields</button>
+<button id="refresh-form-context-receipt" type="button" class="button button--secondary" disabled>Refresh configuration receipt</button>
+<button id="download-form-context-receipt" type="button" class="button button--secondary" disabled>Download receipt</button>
+<p id="full-form-context-status" class="utility-card__body" role="status" aria-live="polite">Open native Form Context before review/apply. Existing fields and permissions are never changed. Patient data is excluded.</p>
+</section>
   <div class="utility-card">
     <h3 class="utility-card__title">Forms for Webforms</h3>
     <p class="utility-card__body">Exports form definitions and linked subforms from Northern Health UAT. Open the capture in Webforms or Form Config → Form library. Captures exclude patient answers, templates and attachments. Include archived forms or older versions when needed.</p>
@@ -75,4 +92,5 @@
       </button>
     </div>
   </div>
+<!-- @include src/popup/html/panels/interface-capture.html -->
 </div>

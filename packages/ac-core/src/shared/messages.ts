@@ -1,3 +1,4 @@
+import type { FormContextArchive, FormContextDeploymentPreview, FormContextReceipt } from './form-context.mjs';
 import type { DocumentAction, DocumentResult } from './documents.mjs';
 import type { DraftDeploymentPreview, DraftDeploymentReceipt } from "./deployment.mjs";
 import type { AlayaCareFormContextCatalogSnapshot } from "./formContextCatalog";
@@ -95,6 +96,14 @@ export interface DesktopSessionState {
 }
 
 export type RuntimeMessage =
+  | {type:'ac/popup/capture-form-context'}
+  | {type:'ac/content/capture-form-context'}
+  | {type:'ac/popup/preview-form-context';payload:{package:unknown}}
+  | {type:'ac/content/preview-form-context';payload:{package:unknown}}
+  | {type:'ac/popup/apply-form-context';payload:{package:unknown;approvedDigest:string}}
+  | {type:'ac/content/apply-form-context';payload:{package:unknown;approvedDigest:string}}
+  | {type:'ac/popup/form-context-receipt';payload:{digest:string}}
+  | {type:'ac/content/form-context-receipt';payload:{digest:string}}
   | {type:"ac/popup/form-documents";payload:DocumentAction}
   | {type:"ac/content/form-documents";payload:DocumentAction}
   | { type: "ac/popup/preview-form-drafts"; payload: { package: unknown } }
@@ -338,6 +347,9 @@ export type RuntimeMessage =
     };
 
 export type ContentCommandData =
+  | FormContextArchive
+  | FormContextDeploymentPreview
+  | FormContextReceipt
   | DocumentResult
   | DraftDeploymentPreview
   | DraftDeploymentReceipt
