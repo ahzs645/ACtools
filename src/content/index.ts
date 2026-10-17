@@ -9,6 +9,7 @@ import { chromeStore } from "../background/platform";
 import { DayViewOverlay } from "./features/dayview";
 import { PageActionButton } from "./features/PageActionButton";
 import { installCatalogPageBridge, CATALOG_READ } from '@ac-core/shared/tenant-catalog.mjs';
+import { PAGE_BUTTON_STORAGE_KEY, isPageButtonEnabled } from "@ac-core/shared/pageButton";
 
 installCatalogPageBridge(window, message => chrome.runtime.sendMessage(message));
 
@@ -26,7 +27,23 @@ const pageActionButton = new PageActionButton(() => {
   void overlay.open().catch(console.error);
 });
 
-pageActionButton.start();
+// Settings → On AlayaCare pages can hide the button; open tabs follow the change live.
+const applyPageButton = (stored: unknown): void => {
+  if (isPageButtonEnabled(stored)) {
+    pageActionButton.start();
+  } else {
+    pageActionButton.stop();
+  }
+};
+void chrome.storage.local.get(PAGE_BUTTON_STORAGE_KEY).then(
+  (stored) => applyPageButton(stored[PAGE_BUTTON_STORAGE_KEY]),
+  () => applyPageButton(true)
+);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && PAGE_BUTTON_STORAGE_KEY in changes) {
+    applyPageButton(changes[PAGE_BUTTON_STORAGE_KEY].newValue);
+  }
+});
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (message && typeof message === 'object' && 'type' in message && message.type === CATALOG_READ) {

@@ -227,3 +227,9 @@ test('workflow graphs reject missing states, unknown control references and dupl
 test('short alphanumeric customer chart identities are normalized and never retained as record routes',()=>{
  assert.equal(safeRoute('#/customer/default/view/id/p7z'), '#/customer/default/view/id/{record}');
 });
+
+test('account-button clock changes do not become removed controls, while ordinary time-labelled fields remain distinct',()=>{
+ const one={...screen,controls:[{...screen.controls[0],label:'18:49MSTnorthernhealth'}]};const two={...screen,controls:[{...screen.controls[0],label:'11:12MSTnorthernhealth'}]};
+ assert.deepEqual(compareScreen(one,two),[]);
+ assert.equal(compareScreen({...one,controls:[{...one.controls[0],label:'11:12 safety review'}]},{...two,controls:[{...two.controls[0],label:'11:13 safety review'}]}).length,2);
+});

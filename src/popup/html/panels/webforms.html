@@ -1,0 +1,331 @@
+<div id="panel-webforms" class="tool-panel">
+  <!-- Menu: what you can do, grouped by whether it only reads or also writes. -->
+  <section class="utility-card utility-view utility-menu" data-webforms-view="menu" aria-labelledby="webforms-menu-heading">
+    <h3 id="webforms-menu-heading" class="sr-only">Forms &amp; Webforms tools</h3>
+
+    <div class="utility-group">
+      <div class="utility-group__heading">
+        <span class="section-label">Export from AlayaCare <button type="button" class="tip" aria-label="About exports" data-tip="Export here, edit in Webforms, then send the result back to UAT. Patient answers are never exported."></button></span>
+        <span class="scope-pill scope-pill--read">Read-only</span>
+      </div>
+      <div class="utility-option-grid">
+        <button type="button" class="utility-option" data-webforms-nav="forms">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5" />
+            </svg>
+          </span>
+          <span>
+            <strong>Forms</strong>
+            <small>Definitions and linked subforms.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+
+        <button type="button" class="utility-option" data-webforms-nav="context-export">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 13h3M8 16h6" />
+            </svg>
+          </span>
+          <span>
+            <strong>Form Context</strong>
+            <small>Full configuration, for designing new fields.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+
+        <button type="button" class="utility-option" data-webforms-nav="catalog">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M3 15h18M9 4v16" />
+            </svg>
+          </span>
+          <span>
+            <strong>Field catalog</strong>
+            <small>Fields and options as Excel, CSV or JSON.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="utility-group">
+      <div class="utility-group__heading">
+        <span class="section-label">Send to UAT</span>
+        <span class="scope-pill scope-pill--write">Creates configuration</span>
+      </div>
+      <div class="utility-option-grid">
+        <button type="button" class="utility-option" data-webforms-nav="drafts">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M12 17v-6M9.5 13.5 12 11l2.5 2.5" />
+            </svg>
+          </span>
+          <span>
+            <strong>Form drafts</strong>
+            <small>Create drafts from Webforms edits.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+
+        <button type="button" class="utility-option" data-webforms-nav="context-deploy">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M12 12v5M9.5 14.5h5" />
+            </svg>
+          </span>
+          <span>
+            <strong>New context fields</strong>
+            <small>Create fields designed in Webforms.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+
+        <button type="button" class="utility-option" data-webforms-nav="documents">
+          <span class="utility-option__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" />
+            </svg>
+          </span>
+          <span>
+            <strong>Templates &amp; child PDFs</strong>
+            <small>Word templates and per-entry PDFs.</small>
+          </span>
+          <span class="utility-option__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Export · Forms -->
+  <section class="utility-card utility-view" data-webforms-view="forms" aria-labelledby="webforms-forms-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-forms-heading" class="utility-card__title">Export forms <button type="button" class="tip" aria-label="About form exports" data-tip="Downloads a versioned JSON file. Open it in Webforms under Form Config → Form library. Patient answers, Word templates and attachments are never included."></button></h3>
+        <p class="utility-card__context">Form definitions with their linked subforms.</p>
+      </div>
+      <span class="scope-pill scope-pill--read">Read-only</span>
+    </div>
+
+    <fieldset class="flow-options">
+      <legend class="section-label">Include</legend>
+      <div class="check-list">
+        <label class="check-row"><input id="include-archived-form-definitions" type="checkbox" checked /> Archived forms</label>
+        <label class="check-row"><input id="include-form-version-history" type="checkbox" /> Older versions <button type="button" class="tip" aria-label="About older versions" data-tip="Up to 200 previous versions per form. Makes the file much larger."></button></label>
+        <label class="check-row"><input id="include-form-tenant-options" type="checkbox" checked /> Tenant options <button type="button" class="tip" aria-label="About tenant options" data-tip="Field options, note types, roles and categories. Definitions only."></button></label>
+      </div>
+    </fieldset>
+
+    <div class="utility-actions">
+      <button id="export-all-form-definitions" type="button" class="button button--primary">Export all forms</button>
+    </div>
+
+    <div class="flow-section">
+      <h4 class="flow-section__title">Or export a single form</h4>
+      <div class="field-group field-group--inline">
+        <label class="field" for="form-definition-selection">
+          <span class="field__label">Form</span>
+          <select id="form-definition-selection" class="input" disabled><option value="">Load the form list first</option></select>
+        </label>
+        <button id="load-form-definitions" type="button" class="button button--secondary">Load list</button>
+      </div>
+      <button id="export-selected-form-definition" type="button" class="button button--secondary" disabled>Export selected form</button>
+    </div>
+
+    <p id="form-definition-status" class="flow-status" role="status" aria-live="polite">Nothing in AlayaCare is changed.</p>
+  </section>
+
+  <!-- Export · Form Context archive -->
+  <section class="utility-card utility-view" data-webforms-view="context-export" aria-labelledby="webforms-context-export-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-context-export-heading" class="utility-card__title">Export Form Context <button type="button" class="tip" aria-label="About Form Context exports" data-tip="Raw field definitions, every module override, roles, input types and families. Unknown keys are kept as-is. If any read fails, the archive is marked incomplete and can't be used to create fields. No patient records or credentials."></button></h3>
+        <p class="utility-card__context">The complete configuration, for designing new context fields in Webforms.</p>
+      </div>
+      <span class="scope-pill scope-pill--read">Read-only</span>
+    </div>
+    <div class="utility-actions">
+      <button id="capture-full-form-context" type="button" class="button button--primary">Export Form Context archive</button>
+    </div>
+    <p id="form-context-capture-status" class="flow-status" role="status" aria-live="polite">Nothing in AlayaCare is changed.</p>
+    <p class="flow-hint">Want a spreadsheet? <button type="button" class="link-button" data-webforms-nav="catalog">Field catalog</button></p>
+  </section>
+
+  <!-- Export · Field catalog -->
+  <section class="utility-card utility-view" data-webforms-view="catalog" aria-labelledby="webforms-catalog-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-catalog-heading" class="utility-card__title">Field catalog</h3>
+        <p class="utility-card__context">Fields, binding tags and dropdown options from the tenant in your active tab. No client records.</p>
+      </div>
+      <span class="scope-pill scope-pill--read">Read-only</span>
+    </div>
+    <div class="utility-actions utility-actions--three">
+      <button id="export-form-context-catalog-xlsx" type="button" class="button button--primary" data-tip="Styled workbook. Merges live Patient fields with the reviewed documentation table and highlights new fields.">Excel</button>
+      <button id="export-form-context-catalog-csv" type="button" class="button button--secondary" data-tip="Same merged table as Excel, as plain CSV.">CSV</button>
+      <button id="export-form-context-catalog-json" type="button" class="button button--secondary" data-tip="Raw snapshot for the Webforms catalog curation command.">JSON</button>
+    </div>
+    <p class="flow-hint">Need the raw configuration? <button type="button" class="link-button" data-webforms-nav="context-export">Form Context</button></p>
+  </section>
+
+  <!-- Send · Form drafts -->
+  <section class="utility-card utility-view" data-webforms-view="drafts" aria-labelledby="webforms-drafts-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-drafts-heading" class="utility-card__title">Push form drafts <button type="button" class="tip" aria-label="About draft pushes" data-tip="Linked child forms are created first. Uses your signed-in Chrome session. Publishing stays in AlayaCare."></button></h3>
+        <p class="utility-card__context">Creates draft copies in UAT from a Webforms file. Nothing is published.</p>
+      </div>
+      <span class="scope-pill scope-pill--write">Writes to UAT</span>
+    </div>
+
+    <div class="flow-prereq">
+      <strong>Before you start</strong>
+      <ul>
+        <li>Export the edited form from Webforms (Form Config → Form library).</li>
+        <li>Open Northern Health UAT Form Settings in your active tab.</li>
+      </ul>
+    </div>
+
+    <ol class="flow-steps">
+      <li class="flow-step">
+        <h4 class="flow-step__title">Choose the deployment file</h4>
+        <input id="form-draft-package" class="input" type="file" accept=".json" aria-label="Webforms draft-deployment JSON" />
+      </li>
+      <li class="flow-step">
+        <h4 class="flow-step__title">Review against UAT <button type="button" class="tip" aria-label="About the review" data-tip="Checks each form against its current UAT source. The push stops if a source changed or a reference isn't supported."></button></h4>
+        <button id="review-form-drafts" type="button" class="button button--secondary" disabled>Review drafts</button>
+        <div id="form-draft-plan" class="flow-plan"></div>
+      </li>
+      <li class="flow-step">
+        <h4 class="flow-step__title">Create the drafts</h4>
+        <label class="check-field">
+          <input id="confirm-form-drafts" type="checkbox" disabled />
+          <span><strong>I've reviewed the plan above</strong><small>Create these drafts in Northern Health UAT.</small></span>
+        </label>
+        <button id="push-form-drafts" type="button" class="button button--primary" disabled>Create drafts</button>
+      </li>
+      <li class="flow-step">
+        <h4 class="flow-step__title">Upload packaged templates <span class="field__optional">If included</span> <button type="button" class="tip" aria-label="About packaged templates" data-tip="Only when the package contains Word templates. Available once the drafts are verified."></button></h4>
+        <button id="upload-packaged-templates" type="button" class="button button--secondary" disabled>Upload templates</button>
+      </li>
+    </ol>
+
+    <div class="flow-receipt">
+      <p id="form-draft-status" class="flow-status" role="status" aria-live="polite">A receipt is saved after each draft, so you can close this panel and check back.</p>
+      <div class="utility-actions utility-actions--two">
+        <button id="refresh-form-draft-receipt" type="button" class="button button--subtle" disabled>Refresh receipt</button>
+        <button id="download-form-draft-receipt" type="button" class="button button--subtle" disabled>Download receipt</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Send · New context fields -->
+  <section class="utility-card utility-view" data-webforms-view="context-deploy" aria-labelledby="webforms-context-deploy-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-context-deploy-heading" class="utility-card__title">Add context fields</h3>
+        <p class="utility-card__context">Creates the fields and module mappings designed in Webforms. Existing fields are never changed.</p>
+      </div>
+      <span class="scope-pill scope-pill--write">Writes to UAT</span>
+    </div>
+
+    <div class="flow-prereq">
+      <strong>Before you start</strong>
+      <ul>
+        <li>Export a create-only deployment from Webforms.</li>
+        <li>Open Form Context in Northern Health UAT in your active tab.</li>
+      </ul>
+    </div>
+
+    <ol class="flow-steps">
+      <li class="flow-step">
+        <h4 class="flow-step__title">Load the deployment</h4>
+        <input id="form-context-deployment-file" class="input" type="file" accept=".json" aria-label="Webforms create-only context deployment" />
+        <details class="flow-disclosure">
+          <summary>Paste JSON instead</summary>
+          <textarea id="form-context-deployment-json" class="input" rows="5" placeholder="Paste the create-only deployment exported by Webforms" aria-label="Deployment JSON"></textarea>
+          <button id="load-form-context-deployment-json" type="button" class="button button--secondary">Load pasted JSON</button>
+        </details>
+      </li>
+      <li class="flow-step">
+        <h4 class="flow-step__title">Review against UAT <button type="button" class="tip" aria-label="About the review" data-tip="Lists each new field with its contexts, required overrides, labels and role exclusions."></button></h4>
+        <button id="review-form-context" type="button" class="button button--secondary" disabled>Review fields</button>
+        <div id="form-context-deployment-plan" class="flow-plan"></div>
+      </li>
+      <li class="flow-step">
+        <h4 class="flow-step__title">Create the fields</h4>
+        <label class="check-field">
+          <input id="confirm-form-context" type="checkbox" disabled />
+          <span><strong>I've reviewed these fields</strong><small>Create them and their mappings in Northern Health UAT.</small></span>
+        </label>
+        <button id="apply-form-context" type="button" class="button button--primary" disabled>Create context fields</button>
+      </li>
+    </ol>
+
+    <div class="flow-receipt">
+      <p id="full-form-context-status" class="flow-status" role="status" aria-live="polite">Patient data is never read or changed.</p>
+      <div class="utility-actions utility-actions--two">
+        <button id="refresh-form-context-receipt" type="button" class="button button--subtle" disabled>Refresh receipt</button>
+        <button id="download-form-context-receipt" type="button" class="button button--subtle" disabled>Download receipt</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Send · Word templates and child PDFs -->
+  <section class="utility-card utility-view" data-webforms-view="documents" aria-labelledby="webforms-documents-heading" hidden>
+    <div class="utility-card__header">
+      <div>
+        <h3 id="webforms-documents-heading" class="utility-card__title">Templates &amp; child PDFs</h3>
+        <p class="utility-card__context">Works on existing forms and submissions. Nothing is approved, signed or published.</p>
+      </div>
+      <span class="scope-pill scope-pill--write">Writes to UAT</span>
+    </div>
+
+    <div class="flow-section">
+      <h4 class="flow-section__title">Upload a Word template <button type="button" class="tip" aria-label="About template uploads" data-tip="Adds a .docx template to an existing form. Keep the template's field tags intact."></button></h4>
+      <div class="field-group field-group--inline">
+        <label class="field" for="document-form-id">
+          <span class="field__label">Native form ID</span>
+          <input id="document-form-id" class="input" type="number" min="1" step="1" inputmode="numeric" />
+        </label>
+        <button id="load-document-templates" type="button" class="button button--secondary">Find form</button>
+      </div>
+      <p id="document-template-target" class="flow-plan"></p>
+      <label class="field" for="document-template-file">
+        <span class="field__label">Word template</span>
+        <input id="document-template-file" class="input" type="file" accept=".docx" />
+      </label>
+      <button id="upload-document-template" type="button" class="button button--primary" disabled>Upload template</button>
+    </div>
+
+    <div class="flow-section">
+      <h4 class="flow-section__title">Print child entries as separate PDFs <button type="button" class="tip" aria-label="About child PDFs" data-tip="One native PDF per direct child entry. The standard parent PDF already contains every entry."></button></h4>
+      <div class="field-group field-group--inline">
+        <label class="field" for="document-parent-submission">
+          <span class="field__label">Parent submission ID</span>
+          <input id="document-parent-submission" class="input" type="number" min="1" step="1" inputmode="numeric" />
+        </label>
+        <button id="review-child-print" type="button" class="button button--secondary">Review entries</button>
+      </div>
+      <div id="child-print-plan" class="flow-plan"></div>
+      <button id="start-child-print" type="button" class="button button--primary" disabled>Generate PDFs</button>
+    </div>
+
+    <div class="flow-receipt">
+      <p id="document-status" class="flow-status" role="status" aria-live="polite">Uses your signed-in UAT session.</p>
+      <div id="document-print-results" class="flow-plan"></div>
+      <details class="flow-disclosure">
+        <summary>Look up an earlier upload or PDF batch</summary>
+        <label class="field" for="document-operation-id">
+          <span class="field__label">Receipt ID</span>
+          <input id="document-operation-id" class="input" type="text" autocomplete="off" />
+        </label>
+        <div class="utility-actions utility-actions--two">
+          <button id="refresh-document-receipt" type="button" class="button button--subtle">Check receipt</button>
+          <button id="download-document-receipt" type="button" class="button button--subtle" disabled>Download receipt</button>
+        </div>
+      </details>
+    </div>
+  </section>
+</div>

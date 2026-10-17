@@ -1,5 +1,8 @@
 import '../../styles.css';
 import {InterfaceCaptureController} from './controller';
+import {installTooltips} from '../../ui/tooltips';
+
+installTooltips();
 
 new InterfaceCaptureController((content,type,name)=>{
   const url=URL.createObjectURL(new Blob([content],{type}));
@@ -7,5 +10,5 @@ new InterfaceCaptureController((content,type,name)=>{
 });
 const params=new URLSearchParams(location.search);
 const status=document.querySelector<HTMLElement>('#interface-source-status')!;
-status.textContent=`Source: ${params.get('origin')??'No tenant selected'}. This workspace stays bound to its source tab while routes warm in a separate tab.`;
+status.textContent=`Source: ${params.get('origin')??'No tenant selected'}. Discovery runs in that tab and returns it to where it started; this workspace stays connected to it.`;
 document.querySelector<HTMLButtonElement>('#open-interface-workspace')!.hidden=true;

@@ -10,10 +10,7 @@
       <input id="client-chart-synthetic-confirm" type="checkbox" />
       <span>
         <strong>Synthetic UAT data only</strong>
-        <small>
-          I confirm that every client and file I open here is a synthetic or test record.
-          Required before any workspace below unlocks.
-        </small>
+        <small>Every client and file I open here is synthetic or test data. Unlocks the tools below.</small>
       </span>
     </label>
 
@@ -35,7 +32,7 @@
         </span>
         <span>
           <strong>Structured client snapshot</strong>
-          <small>Search a UAT tenant and build a reviewable JSON chart snapshot.</small>
+          <small>Search a client and build a JSON chart snapshot.</small>
         </span>
         <span class="utility-option__arrow" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -60,7 +57,7 @@
         </span>
         <span>
           <strong>Create client from JSON</strong>
-          <small>Replay a chart export into a new synthetic client on this tenant.</small>
+          <small>Replay a chart export into a new test client.</small>
         </span>
         <span class="utility-option__arrow" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -85,7 +82,7 @@
         </span>
         <span>
           <strong>Batch PDF parser</strong>
-          <small>Turn AlayaCare batch-export PDFs into inspectable JSON, fully offline.</small>
+          <small>Turn batch-export PDFs into JSON, offline.</small>
         </span>
         <span class="utility-option__arrow" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -100,7 +97,7 @@
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
         <path d="m9 12 2 2 4-4" />
       </svg>
-      <span>Uses your active AlayaCare session. Snapshots download locally and are never uploaded.</span>
+      <span>Uses your active AlayaCare session. Nothing is uploaded.</span>
     </div>
   </section>
 
@@ -112,24 +109,14 @@
   >
     <div class="utility-card__header">
       <div>
-        <h3 id="client-chart-snapshot-heading" class="utility-card__title">Structured client snapshot</h3>
-        <p class="utility-card__context">
-          Reads a client through your authenticated session and builds a reviewable JSON
-          snapshot. Restricted to UAT test data.
-        </p>
+        <h3 id="client-chart-snapshot-heading" class="utility-card__title">Structured client snapshot <button type="button" class="tip" aria-label="What a snapshot contains" data-tip="Demographics, medical history, risks, contacts, notes, services, care plans, forms, tasks, medications and document metadata. Records the source and outcome of every section. Attachment metadata only, never file contents."></button></h3>
+        <p class="utility-card__context">A reviewable JSON copy of a test client's chart. Downloads locally.</p>
       </div>
     </div>
-    <ul class="utility-card__list">
-      <li>Demographics, medical history, risks, contacts, notes, services, care plans, forms, tasks, medications, and document metadata</li>
-      <li>Records the source endpoint and success or failure of every section</li>
-      <li>Attachment metadata only—never attachment file contents</li>
-      <li>Downloads locally and does not upload or transmit the chart</li>
-    </ul>
 
     <section class="chart-client-search" aria-labelledby="client-chart-search-heading">
       <div>
         <h4 id="client-chart-search-heading">Find a synthetic UAT client</h4>
-        <p>Search by client name or AlayaCare ID, then inspect a matching chart.</p>
       </div>
       <div class="field-group field-group--inline">
         <label class="field" for="client-chart-search-input">
@@ -165,16 +152,12 @@
           id="rank-client-charts"
           type="button"
           class="button button--secondary"
-          title="Rank active clients by how complete their charts are"
+          data-tip="Preselects active clients with rich metadata, then ranks them by populated sections and record counts. Can take a minute."
           disabled
         >
           Rank charts
         </button>
       </div>
-      <p class="field__hint">
-        Preselects metadata-rich active clients, then ranks them by populated chart sections
-        and record counts. This bounded scan may take a minute.
-      </p>
       <div id="client-chart-search-results" class="chart-client-search__results" aria-live="polite">
         <p>Confirm synthetic UAT data to enable client search.</p>
       </div>
@@ -215,12 +198,8 @@
   >
     <div class="utility-card__header">
       <div>
-        <h3 id="client-chart-import-heading" class="utility-card__title">Create client from JSON</h3>
-        <p class="utility-card__context">
-          Preview an AC Tools chart export, edit the new client's basic information and
-          API-backed care location, then create a test client in the same UAT tenant.
-          Source identifiers and contact details are never copied automatically.
-        </p>
+        <h3 id="client-chart-import-heading" class="utility-card__title">Create client from JSON <button type="button" class="tip" aria-label="How client creation works" data-tip="Preview the export, edit the new client's details and care location, then create it. Name, date of birth and gender are suggested; source identifiers and contact details are never copied."></button></h3>
+        <p class="utility-card__context">Creates a new test client in this tenant from an AC Tools chart export.</p>
       </div>
     </div>
 
@@ -297,7 +276,7 @@
           </button>
         </span>
         <small id="client-chart-import-health-card-hint" class="field__hint field__hint--required">
-          Required. Enter a test-only value or generate one; the source client's health card is never copied.
+          Test-only value. The source health card is never copied.
         </small>
       </label>
       <label class="field" for="client-chart-import-gender">
@@ -316,16 +295,13 @@
         <span class="field__label">Main phone <span class="field__optional">Optional</span></span>
         <input id="client-chart-import-phone-main" class="input" type="tel" maxlength="50" autocomplete="off" disabled />
       </label>
-      <p class="field__hint chart-import__target-hint">
-        Name, date of birth, and gender are suggested. Source identifiers are never copied.
-      </p>
     </div>
 
     <section class="chart-import__destination" aria-labelledby="client-chart-import-destination-heading" hidden>
       <div class="utility-section-heading">
         <div>
           <h4 id="client-chart-import-destination-heading">Care location</h4>
-          <p>Choose one or more live UAT care locations or client groups returned by the AlayaCare API.</p>
+          <p>Live UAT care locations or client groups.</p>
         </div>
         <span id="client-chart-import-destination-count" class="status-badge" data-tone="neutral">Loading</span>
       </div>
@@ -349,7 +325,7 @@
       >
         <p>Destination groups load after the JSON preview is validated.</p>
       </div>
-      <p class="field__hint">Select at least one. Matching source groups are selected automatically when available; you can change them before creation.</p>
+      <p class="field__hint">Select at least one. Matching source groups are preselected.</p>
       <label class="field" for="client-chart-import-cost-centre">
         <span class="field__label">Cost centre <span class="field__optional">Optional</span></span>
         <select id="client-chart-import-cost-centre" class="input" disabled>
@@ -376,7 +352,7 @@
         <input id="client-chart-import-medications" type="checkbox" />
         <span>Medications</span>
       </label>
-      <p class="field__hint chart-import__sections-hint">These indicators show what is present. The importer also recreates profile fields, status, notes, services, authorizations, required skills, and care plans automatically.</p>
+      <p class="field__hint chart-import__sections-hint">Also recreates profile, status, notes, services, authorizations, skills and care plans.</p>
     </fieldset>
 
     <label class="check-field chart-import__confirm" hidden>
@@ -420,19 +396,10 @@
   >
     <div class="utility-card__header">
       <div>
-        <h3 id="client-chart-pdf-heading" class="utility-card__title">Batch PDF parser</h3>
-        <p class="utility-card__context">
-          Select one or more AlayaCare batch PDFs. Parsing happens entirely inside this
-          extension and produces inspectable page text, report groups, client identifiers,
-          batch dates, and visit-day indexes.
-        </p>
+        <h3 id="client-chart-pdf-heading" class="utility-card__title">Batch PDF parser <button type="button" class="tip" aria-label="What the parser extracts" data-tip="Page text, report type per page, client identifiers, batch dates and visits grouped by day. No tenant request is made."></button></h3>
+        <p class="utility-card__context">Turns AlayaCare batch PDFs into JSON, entirely offline.</p>
       </div>
     </div>
-    <ul class="utility-card__list">
-      <li>Runs offline: no tenant request is made and nothing is uploaded</li>
-      <li>Classifies each page by report type and groups visits by day</li>
-      <li>Downloads the parsed index as JSON</li>
-    </ul>
 
     <label class="field" for="client-chart-pdf-files">
       <span class="field__label">AlayaCare batch PDF files</span>

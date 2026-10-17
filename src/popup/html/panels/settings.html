@@ -15,7 +15,7 @@
         <span class="radio__indicator" aria-hidden="true"></span>
         <span class="radio__label">
           <span class="radio__title">Popup</span>
-          <span class="radio__description">Floating window above the page when you click the toolbar icon.</span>
+          <span class="radio__description">Opens over the page from the toolbar icon.</span>
         </span>
       </label>
     </div>
@@ -50,35 +50,42 @@
     </div>
   </div>
 
+  <!-- Chrome only: the desktop app has no content script to configure. -->
+  <div class="settings-section settings-section--extension">
+    <span class="section-label">On AlayaCare pages</span>
+    <div class="settings-form">
+      <label class="check-field">
+        <input id="page-button-toggle" type="checkbox" checked />
+        <span>
+          <strong>Show the AC Tools button</strong>
+          <small>Next to AlayaCare's search. Day View still opens from here when it's off.</small>
+        </span>
+      </label>
+    </div>
+  </div>
+
   <div class="settings-section">
-    <span class="section-label">Optional tools</span>
-    <p class="settings-hint settings-hint--muted">
-      Turn Client Chart Export workspaces on or off. A tool that is off is hidden in the
-      menu and its requests are refused, so nothing reaches the tenant.
-    </p>
+    <span class="section-label">Client Chart Export tools <button type="button" class="tip" aria-label="About optional tools" data-tip="A tool that is off is hidden in the menu and its requests are refused, so nothing reaches the tenant."></button></span>
     <div class="settings-form">
       <label class="check-field">
         <input type="checkbox" data-feature-flag="clientChartSnapshot" />
         <span>
           <strong>Structured client snapshot</strong>
-          <small>
-            Searches, ranks, and reads live client charts on the signed-in AlayaCare UAT
-            tenant. Off by default.
-          </small>
+          <small>Reads live client charts in UAT. Off by default.</small>
         </span>
       </label>
       <label class="check-field">
         <input type="checkbox" data-feature-flag="clientChartImport" />
         <span>
           <strong>Create client from JSON</strong>
-          <small>Creates a new synthetic client on the active UAT tenant from a chart export.</small>
+          <small>Creates a test client from a chart export.</small>
         </span>
       </label>
       <label class="check-field">
         <input type="checkbox" data-feature-flag="clientChartPdfParser" />
         <span>
           <strong>Batch PDF parser</strong>
-          <small>Parses AlayaCare batch PDFs inside the extension. Makes no tenant requests.</small>
+          <small>Runs offline. Makes no tenant requests.</small>
         </span>
       </label>
     </div>

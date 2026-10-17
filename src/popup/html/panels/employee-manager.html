@@ -71,10 +71,8 @@
 
     <div class="employee-copy-form employee-task-form">
       <div>
-        <h4 class="employee-copy-form__title">Onboarding tasks</h4>
-        <p class="employee-summary">
-          Clones this tenant's task template for the selected employee and assigns it to one of their groups. Preview resolves the template, employee, and group before anything is written.
-        </p>
+        <h4 class="employee-copy-form__title">Onboarding tasks <button type="button" class="tip" aria-label="How onboarding tasks work" data-tip="Preview resolves the template, employee and group before anything is written. The template is set per environment."></button></h4>
+        <p class="employee-summary">Copies the onboarding task template to the selected employee and one of their groups.</p>
       </div>
       <div class="employee-task-form__grid">
         <input id="employee-task-template" class="input" type="number" min="1" step="1" inputmode="numeric" placeholder="Template task ID" aria-label="Template task ID" />
@@ -117,7 +115,7 @@
     <div>
       <h3 class="uat-smoke-card__title">External API credentials</h3>
       <p class="uat-smoke-card__body">
-        Required for employee writes. Session-only is the default; remembered keys stay only in this Chrome profile and are never synced.
+        Required for employee writes. <button type="button" class="tip" aria-label="How keys are stored" data-tip="Kept for this session by default. Remembered keys stay only in this Chrome profile and are never synced."></button>
       </p>
       <p id="employee-api-credential-status" class="employee-summary">Not configured.</p>
     </div>
@@ -140,7 +138,7 @@
     <div>
       <h3 class="uat-smoke-card__title">Selected UAT employee test</h3>
       <p class="uat-smoke-card__body">
-        For a selected employee clearly marked Test: change active → suspended → active and add audit notes.
+        Runs active → suspended → active with audit notes. <button type="button" class="tip" aria-label="When this test runs" data-tip="Only for a selected employee clearly marked Test."></button>
       </p>
     </div>
     <button id="employee-test-selected" type="button" class="button button--secondary" disabled title="Run the guarded active → suspended → active round trip">

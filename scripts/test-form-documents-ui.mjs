@@ -11,7 +11,7 @@ try{
  const output=join(temporary,'ui.mjs');
  await build({stdin:{contents:`export {FormDocumentsController} from './src/popup/features/formDefinitions/documentsController';export {FormDeploymentController} from './src/popup/features/formDefinitions/deploymentController';`,resolveDir:process.cwd()},outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
  const {FormDocumentsController,FormDeploymentController}=await import(pathToFileURL(output).href);
- const dom=new JSDOM(await readFile('src/popup/html/panels/form-context-catalog.html','utf8'),{url:'https://extension.example'});
+ const dom=new JSDOM(await readFile('src/popup/html/panels/webforms.html','utf8'),{url:'https://extension.example'});
  globalThis.document=dom.window.document;globalThis.localStorage=dom.window.localStorage;
  const el=id=>document.getElementById(id),tick=async()=>{for(let n=0;n<8;n++)await new Promise(resolve=>setTimeout(resolve,0));};
  const choices=[{id:3,name:'Standard',isDefault:true},{id:65,name:'Custom',isDefault:false}],schemaId=crypto.randomUUID(),calls=[];
@@ -31,7 +31,7 @@ try{
  new FormDeploymentController({send,download:()=>{}});
  const raw={format:'webforms-alayacare-draft-deployment',formatVersion:1,packageId:'ui-test',targetOrigin:'https://northernhealth.uat.alayacare.ca',createdAt:new Date().toISOString(),parentKey:'parent',notes:[],forms:[{key:'parent',definition:{name:'Test',form_type:'form_regular',fields:[]},links:[]}],templates:[{formKey:'foreign',fileName:'Entry.docx',base64:Buffer.from([80,75,3,4,1,2]).toString('base64')}]};
  Object.defineProperty(el('form-draft-package'),'files',{value:[{size:100,text:async()=>JSON.stringify(raw)}]});el('form-draft-package').dispatchEvent(new dom.window.Event('change'));await tick();assert(el('review-form-drafts').disabled);assert.match(el('form-draft-status').textContent,/invalid form key/);
- const fresh=new JSDOM(await readFile('src/popup/html/panels/form-context-catalog.html','utf8'),{url:'https://extension.example'});globalThis.document=fresh.window.document;globalThis.localStorage=fresh.window.localStorage;
+ const fresh=new JSDOM(await readFile('src/popup/html/panels/webforms.html','utf8'),{url:'https://extension.example'});globalThis.document=fresh.window.document;globalThis.localStorage=fresh.window.localStorage;
  const saved=new Map(),uploads=[];
  const deployed={packageId:'ui-test',status:'verified',formIds:{parent:201},verifiedForms:['parent'],errors:[]};
  const packageSend=async message=>{

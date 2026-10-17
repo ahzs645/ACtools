@@ -67,6 +67,13 @@ export class PageActionButton {
     });
   }
 
+  /** Removes the button and stops re-adding it as AlayaCare re-renders. */
+  stop(): void {
+    this.observer.disconnect();
+    this.button?.remove();
+    this.button = null;
+  }
+
   private ensureStyles(): void {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
       return;

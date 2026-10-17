@@ -2765,7 +2765,8 @@ html[data-surface="desktop"] #app {
   box-shadow: 0 0 0 1px var(--ac-color-neutral-stroke-subtle);
 }
 
-html[data-surface="desktop"] .settings-section--surface {
+html[data-surface="desktop"] .settings-section--surface,
+html[data-surface="desktop"] .settings-section--extension {
   display: none;
 }
 
@@ -2809,8 +2810,384 @@ html[data-surface="desktop"] .settings-section--surface {
   }
 }
 /* A persistent full-tab capture workspace does not compete with native page UI. */
-.capture-workspace { max-width: 1100px; margin: 32px auto; padding: 0 24px 48px; }
+.capture-workspace { max-width: 768px; margin: 32px auto; padding: 0 24px 48px; }
 .capture-workspace > h1 { font-size: 24px; margin-bottom: 8px; }
 .capture-workspace > p { margin-bottom: 20px; }
-.capture-workspace .utility-card > label { display: block; margin: 12px 0 6px; }
-.capture-workspace .utility-card > button { margin: 8px 8px 8px 0; }
+
+/* Tool menus grouped by effect: what only reads vs. what writes to a tenant. */
+.utility-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+}
+
+.utility-group__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-8);
+}
+
+.utility-group__heading .section-label {
+  margin: 0;
+}
+
+.scope-pill {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 1px var(--ac-space-8);
+  border-radius: var(--ac-radius-circular);
+  font-size: var(--ac-font-size-100);
+  font-weight: var(--ac-font-weight-semibold);
+  line-height: var(--ac-line-height-200);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.scope-pill--read {
+  background-color: var(--ac-color-status-success-background);
+  color: var(--ac-color-status-success-foreground);
+}
+
+.scope-pill--write {
+  background-color: var(--ac-color-status-warning-background);
+  color: var(--ac-color-status-warning-foreground);
+}
+
+/* Guided workflows: prerequisites, numbered steps, and a receipt footer. */
+.flow-options {
+  display: grid;
+  gap: var(--ac-space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.flow-options legend {
+  margin-bottom: var(--ac-space-8);
+  padding: 0;
+}
+
+.flow-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  padding-top: var(--ac-space-12);
+  border-top: 1px solid var(--ac-color-neutral-stroke-subtle);
+}
+
+.flow-section__title,
+.flow-step__title {
+  margin: 0;
+  color: var(--ac-color-neutral-foreground-1);
+  font-size: var(--ac-font-size-300);
+  font-weight: var(--ac-font-weight-semibold);
+  line-height: var(--ac-line-height-300);
+}
+
+.flow-step__hint,
+.flow-hint {
+  margin: 0;
+  color: var(--ac-color-neutral-foreground-3);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+}
+
+.flow-prereq {
+  padding: var(--ac-space-8) var(--ac-space-12);
+  border-radius: var(--ac-radius-medium);
+  background-color: var(--ac-color-brand-background-2);
+  color: var(--ac-color-neutral-foreground-2);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+}
+
+.flow-prereq ul {
+  margin: var(--ac-space-4) 0 0;
+  padding-left: var(--ac-space-16);
+}
+
+.flow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: flow-step;
+}
+
+.flow-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  padding-left: 32px;
+  counter-increment: flow-step;
+}
+
+.flow-step::before {
+  content: counter(flow-step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ac-radius-circular);
+  background-color: var(--ac-color-brand-background-2);
+  color: var(--ac-color-brand-foreground-1);
+  font-size: var(--ac-font-size-200);
+  font-weight: var(--ac-font-weight-semibold);
+}
+
+/* Connector line between step numbers. */
+.flow-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 26px;
+  bottom: calc(-1 * var(--ac-space-16) + 4px);
+  left: 10px;
+  width: 2px;
+  background-color: var(--ac-color-neutral-stroke-subtle);
+}
+
+.flow-step > .button,
+.flow-section > .button {
+  align-self: flex-start;
+}
+
+.flow-plan {
+  margin: 0;
+  padding: var(--ac-space-8) var(--ac-space-12);
+  border: 1px solid var(--ac-color-neutral-stroke-subtle);
+  border-radius: var(--ac-radius-medium);
+  background-color: var(--ac-color-neutral-background-2);
+  color: var(--ac-color-neutral-foreground-2);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+  overflow-wrap: anywhere;
+}
+
+.flow-plan:empty {
+  display: none;
+}
+
+.flow-plan ul {
+  margin: 0;
+  padding-left: var(--ac-space-16);
+}
+
+.flow-plan li + li {
+  margin-top: var(--ac-space-6);
+}
+
+.flow-plan p {
+  margin: var(--ac-space-6) 0 0;
+}
+
+.flow-plan details summary {
+  color: var(--ac-color-brand-foreground-1);
+  cursor: pointer;
+}
+
+.flow-plan pre {
+  max-height: 200px;
+  margin: var(--ac-space-4) 0 0;
+  overflow: auto;
+  font-size: var(--ac-font-size-100);
+}
+
+.flow-plan .field {
+  margin-top: var(--ac-space-6);
+}
+
+.flow-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  padding-top: var(--ac-space-12);
+  border-top: 1px solid var(--ac-color-neutral-stroke-subtle);
+}
+
+.flow-status {
+  margin: 0;
+  color: var(--ac-color-neutral-foreground-2);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+  overflow-wrap: anywhere;
+}
+
+.flow-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+}
+
+.flow-disclosure > summary {
+  width: fit-content;
+  color: var(--ac-color-brand-foreground-1);
+  font-size: var(--ac-font-size-200);
+  cursor: pointer;
+}
+
+.flow-disclosure[open] > summary {
+  margin-bottom: var(--ac-space-8);
+}
+
+.flow-disclosure > .button {
+  align-self: flex-start;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ac-color-brand-foreground-1);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.flow-status--boxed {
+  padding: var(--ac-space-8) var(--ac-space-12);
+  border: 1px solid var(--ac-color-neutral-stroke-subtle);
+  border-radius: var(--ac-radius-medium);
+  background-color: var(--ac-color-neutral-background-2);
+}
+
+/* Compact checkbox rows for option lists that don't need a description each. */
+.check-list {
+  display: grid;
+  gap: var(--ac-space-6);
+}
+
+.check-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ac-space-8);
+  color: var(--ac-color-neutral-foreground-2);
+  font-size: var(--ac-font-size-200);
+  line-height: var(--ac-line-height-300);
+  cursor: pointer;
+}
+
+.check-row small {
+  color: var(--ac-color-neutral-foreground-3);
+}
+
+/* A stack of collapsible sections for secondary tools and options. */
+.fold-list {
+  border-top: 1px solid var(--ac-color-neutral-stroke-subtle);
+}
+
+.fold {
+  border-bottom: 1px solid var(--ac-color-neutral-stroke-subtle);
+}
+
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-8);
+  padding: var(--ac-space-10) 0;
+  color: var(--ac-color-neutral-foreground-1);
+  font-size: var(--ac-font-size-300);
+  font-weight: var(--ac-font-weight-semibold);
+  line-height: var(--ac-line-height-300);
+  list-style: none;
+  cursor: pointer;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin: 0 var(--ac-space-2);
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--ac-motion-duration-fast) var(--ac-motion-easing-standard);
+}
+
+.fold[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.fold[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-10);
+  padding-bottom: var(--ac-space-12);
+}
+
+.fold[open] > summary {
+  padding-bottom: 0;
+}
+
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-16);
+  font-size: var(--ac-font-size-200);
+}
+
+/* Info button that reveals explanatory detail; see ui/tooltips.ts. */
+.tip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--ac-space-4);
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: var(--ac-radius-circular);
+  background: none;
+  color: var(--ac-color-neutral-foreground-3);
+  font: inherit;
+  font-size: 10px;
+  font-weight: var(--ac-font-weight-bold);
+  line-height: 1;
+  vertical-align: 0.1em;
+  cursor: help;
+}
+
+.tip::before {
+  content: "i";
+}
+
+.tip:hover,
+.tip:focus-visible {
+  color: var(--ac-color-brand-foreground-1);
+}
+
+.tip:focus-visible {
+  outline: 2px solid var(--ac-color-brand-stroke-1);
+  outline-offset: 1px;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  padding: var(--ac-space-8) var(--ac-space-10);
+  border-radius: var(--ac-radius-medium);
+  background-color: var(--ac-color-neutral-foreground-1);
+  color: var(--ac-color-neutral-background-1);
+  box-shadow: var(--ac-shadow-8, 0 4px 12px rgb(0 0 0 / 0.2));
+  font-size: var(--ac-font-size-200);
+  font-weight: var(--ac-font-weight-regular);
+  line-height: var(--ac-line-height-300);
+  pointer-events: none;
+}
+
+.tooltip[hidden] {
+  display: none;
+}

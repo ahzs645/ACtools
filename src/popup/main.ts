@@ -52,6 +52,7 @@ import { EmployeeTaskCloneController } from "./features/employees/taskCloneContr
 import { DesktopTenantBar } from "./features/desktop/tenantBar";
 import { ShiftLabController } from "./features/shifts/controller";
 import { FormDefinitionsController } from "./features/formDefinitions/controller";
+import { initPageButtonSetting } from "./features/pageButton";
 import {
   type EmployeeSortField,
   type SortDirection,
@@ -66,6 +67,8 @@ import {
   showResultScope,
   withResult
 } from "./ui/result";
+import { createSubViews } from "./ui/subViews";
+import { installTooltips } from "./ui/tooltips";
 import { showToast } from "./ui/toasts";
 import {
   DEFAULT_SURFACE,
@@ -118,6 +121,7 @@ let clientChartView: ClientChartView = "menu";
 let featureFlags: AcFeatureFlags = { ...DEFAULT_FEATURE_FLAGS };
 
 const elements = getPopupElements();
+installTooltips();
 const environmentManager = new EnvironmentManagerController(async () => {
   await refreshConfiguredEmployeeTenants();
   await desktopTenantBar.refresh();
@@ -129,6 +133,26 @@ new FormDefinitionsController({ send: sendRuntimeMessage, download: downloadFile
 new FormDocumentsController({ send: sendRuntimeMessage, download: downloadFile });
 new FormDeploymentController({ send: sendRuntimeMessage, download: downloadFile });
 new FormContextController({ send: sendRuntimeMessage, download: downloadFile });
+const webformsViews = createSubViews({
+  name: "webforms",
+  menuSubtitle: "Export to Webforms, or send Webforms edits back to UAT.",
+  labels: {
+    forms: "Export · Forms",
+    "context-export": "Export · Form Context",
+    catalog: "Export · Field catalog",
+    drafts: "Send to UAT · Form drafts",
+    "context-deploy": "Send to UAT · New context fields",
+    documents: "Send to UAT · Templates & child PDFs"
+  },
+  // Only the field catalog reports through the shared result block.
+  onShow: (view) => {
+    if (view === "catalog") {
+      showResultScope("webforms-catalog", "Field catalog");
+    } else {
+      hideResultScope();
+    }
+  }
+});
 const employeeCopyController = new EmployeeCopyController({
   getEmployee: () => selectedEmployee
     ? { ...selectedEmployee, timezone: selectedEmployee.timezone || appPreferences.defaultTimezone }
@@ -179,6 +203,7 @@ async function init(): Promise<void> {
   featureFlags = await loadFeatureFlags(popupStorage.local);
   applyFeatureFlagToggles();
   applyClientChartGuard();
+  await initPageButtonSetting();
 
   elements.themeToggle.addEventListener("click", () => {
     void toggleTheme();
@@ -370,6 +395,9 @@ async function init(): Promise<void> {
     if (activePanelName === "connector-utilities" && connectorUtilities.backToOptions()) {
       return;
     }
+    if (activePanelName === "webforms" && webformsViews.back()) {
+      return;
+    }
     if (activePanelName === "client-chart-export" && clientChartView !== "menu") {
       showClientChartView("menu");
       return;
@@ -493,6 +521,12 @@ async function handleTileClick(tile: HTMLButtonElement): Promise<void> {
     return;
   }
 
+  if (panelName === "webforms") {
+    showDetail(title, subtitle, panelName);
+    webformsViews.show("menu");
+    return;
+  }
+
   if (panelName === "shift-lab") {
     showDetail(title, subtitle, panelName);
     await shiftLab.open();
@@ -518,7 +552,9 @@ const PANELS_WITHOUT_SHARED_RESULT = new Set([
   "settings",
   "connector-utilities",
   "client-chart-export",
-  "shift-lab"
+  "shift-lab",
+  "webforms",
+  "interface-snapshots"
 ]);
 
 function showDetail(title: string, subtitle: string, panelName: string): void {

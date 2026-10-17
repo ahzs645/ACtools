@@ -73,7 +73,7 @@ export interface InterfaceDiscovery {
   finishedAt: string;
   stopped: boolean;
   limit: number;
-  attempts: { route: string; status: 'captured' | 'redirected' | 'failed'; actualRoute?: string; error?: string; durationMs?:number; navigation?:'initial'|'dom'|'hash' }[];
+  attempts: { route: string; status: 'captured' | 'redirected' | 'failed'; actualRoute?: string; error?: string; durationMs?:number; navigation?:'initial'|'dom'|'hash'|'reload' }[];
   pending: string[];
 }
 export function safeRoute(value: unknown): string | null;

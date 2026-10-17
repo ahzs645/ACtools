@@ -171,6 +171,8 @@ export function captureRouteMatches(expected, actual) {
   // arbitrary new route as proof that the requested page loaded.
   const aliases = {
     '#/dashboard':'#/dashboard/live',
+    '#/accounting/billing':'#/accounting/billing/billable-item-management',
+    '#/system-settings':'#/system-settings/system',
     '#/employee/default/list':'#/employees/list',
     '#/dashboard/client-intake-beta':'#/intake/offers',
     '#/employee/department/listall':'#/employees/departments',
@@ -234,7 +236,10 @@ function captureNativeScreen(doc, href, state, options) {
   const route = safeRoute(url.hash);
   if (!route) throw new Error("This page has no supported AlayaCare route.");
   const visible = (el) => !isExtensionUI(el) && Boolean(el.getClientRects().length);
+  // Native settings style the input as display:none and render its sibling span.
+  const visibleControl = el => visible(el) || (el.matches('input[type=checkbox],input[type=radio]') && !isExtensionUI(el) && [...(el.closest('label')?.children??[])].some(child=>child!==el&&visible(child)));
   const label = (el) =>
+    el.closest('.formRow')?.querySelector(':scope > .grid4 > label')?.textContent?.trim() ||
     el.closest(".field-grid")?.querySelector(":scope > .field-label")?.textContent?.trim() ||
     el.closest(".form-group,.input-container,.input-wrapper,.field")?.querySelector('label,.label,.input_label,.input-label,[data-test="input-label"]')?.textContent?.trim() ||
     el.getAttribute("aria-label") ||
@@ -300,8 +305,8 @@ function captureNativeScreen(doc, href, state, options) {
       "button,input,textarea,select,[role=combobox],[role=switch]",
     ),
   ]
-    .filter((el) => visible(el) && (full || !el.closest("td") || (el.tagName !== 'BUTTON' && recordColumn(el) !== null)));
-  if(controlElements.length>(full?1000:300)){limits.push('Control count exceeded the capture budget.');controlElements.length=full?1000:300;}
+    .filter((el) => visibleControl(el) && (full || !el.closest("td") || (el.tagName !== 'BUTTON' && recordColumn(el) !== null)));
+  if(controlElements.length>(full?5000:300)){limits.push('Control count exceeded the capture budget.');controlElements.length=full?5000:300;}
   const controlIds = new Map(controlElements.map((el,index)=>[el,`c${index}`]));
   const controls = controlElements.map((el) => ({
       id: controlIds.get(el),
@@ -324,7 +329,7 @@ function captureNativeScreen(doc, href, state, options) {
   let truncated = false;
   function tree(el, inRecord = false) {
     if (isExtensionUI(el)) return null;
-    if (++count > (full?20000:5000)) {
+    if (++count > (full?50000:5000)) {
       truncated = true;
       return null;
     }
@@ -532,7 +537,7 @@ export function validateInterfaceCapture(value) {
       if (list.some((v) => typeof v !== "string" || v.length > 1000))
         throw new Error("Invalid screen labels.");
     if (
-      screen.controls.length > 1000 ||
+      screen.controls.length > 5000 ||
       screen.controls.some(
         (c) =>
           !c ||
@@ -575,7 +580,7 @@ export function validateInterfaceCapture(value) {
       // Older runs followed legacy record links and setup-account. Preserve that
       // dated evidence even though new traversal deliberately excludes them.
       const historical = !discovery.strategy && safeRoute(attempt.route) && (/^#\/(?:employee\/[^/]+\/view\/id\/|facilities\/)/.test(attempt.route)||attempt.route==='#/login/setup-account');
-      if (!(isInterfaceTraversalRoute(attempt.route)||isInterfaceChartRoute(attempt.route)||historical) || !['captured','redirected','failed'].includes(attempt.status) || (attempt.actualRoute !== undefined && !safeRoute(attempt.actualRoute)) || (attempt.error !== undefined && (typeof attempt.error !== 'string' || attempt.error.length > 1000)) || (attempt.durationMs!==undefined&&(!Number.isFinite(attempt.durationMs)||attempt.durationMs<0)) || (attempt.navigation!==undefined&&!['initial','dom','hash'].includes(attempt.navigation))) throw new Error('Invalid route discovery attempt.');
+      if (!(isInterfaceTraversalRoute(attempt.route)||isInterfaceChartRoute(attempt.route)||historical) || !['captured','redirected','failed'].includes(attempt.status) || (attempt.actualRoute !== undefined && !safeRoute(attempt.actualRoute)) || (attempt.error !== undefined && (typeof attempt.error !== 'string' || attempt.error.length > 1000)) || (attempt.durationMs!==undefined&&(!Number.isFinite(attempt.durationMs)||attempt.durationMs<0)) || (attempt.navigation!==undefined&&!['initial','dom','hash','reload'].includes(attempt.navigation))) throw new Error('Invalid route discovery attempt.');
     }
     if (discovery.pending.some(route => !(isInterfaceChartRoute(route)||(discovery.strategy?isInterfaceTraversalRoute(route):isRecordedNavigationRoute(route))))) throw new Error('Invalid pending discovery routes.');
   }
@@ -588,7 +593,7 @@ export function validateInterfaceCapture(value) {
 }
 export function compareScreen(expected, actual) {
   const changes = [];
-  const stableLabel=label=>label?.replace(/^\d{1,2}:\d{2}\s*•\s*(MST|PST|PDT)\b/,'<clock> • $1');
+  const stableLabel=label=>label?.replace(/^\d{1,2}:\d{2}\s*(?:•\s*)?(MST|PST|PDT)(?=\b|[a-z])/,'<clock> $1');
   const visuals=node=>node?[node.visual??null,...node.children.flatMap(visuals)]:[];
   if(JSON.stringify(visuals(expected.tree))!==JSON.stringify(visuals(actual.tree)))changes.push({kind:'visual-detail',message:'Icon, pseudo-element, image or SVG evidence changed.'});
   for (const key of ["headings", "columns"])

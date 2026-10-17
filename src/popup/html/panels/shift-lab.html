@@ -1,16 +1,9 @@
 <div id="panel-shift-lab" class="tool-panel">
   <section class="utility-card shift-lab-intro">
     <div>
-      <h3 class="utility-card__title">Unassigned shift scenario builder</h3>
-      <p class="utility-card__body">
-        Resolves real service-location identifiers from the active UAT tenant, then stores
-        the requested shift and ruleset test records locally in this Chrome profile.
-      </p>
+      <h3 class="utility-card__title">Unassigned shift scenario builder <button type="button" class="tip" aria-label="What Shift Lab does and doesn't do" data-tip="AlayaCare's native scheduler creates client/service visits and doesn't expose these Shift_* or Ruleset_* fields. Shift Lab never creates a native visit."></button></h3>
+      <p class="utility-card__body">Looks up real service locations in UAT and saves shift and ruleset test records locally.</p>
     </div>
-    <p class="shift-lab-boundary">
-      AlayaCare's native scheduler creates client/service visits and does not expose these
-      Shift_* or Ruleset_* fields. Shift Lab does not claim or create a native visit.
-    </p>
     <div class="shift-lab-mode" aria-label="Shift Lab operating mode">
       <span class="shift-lab-mode__badge">Local fixture</span>
       <span>Reads service locations from UAT · writes only to this browser profile</span>
@@ -19,7 +12,7 @@
       <input id="shift-lab-uat-confirm" type="checkbox" />
       <span>
         <strong>UAT test data only</strong>
-        <small>I will select a test service location and use these records for test-data design.</small>
+        <small>I'll pick a test service location and use these records for test design.</small>
       </span>
     </label>
   </section>
