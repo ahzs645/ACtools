@@ -10,17 +10,17 @@ permissions:
 
 jobs:
   extension:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
@@ -43,7 +43,7 @@ jobs:
         run: npm run package
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: AC Tools ${{ github.ref_name }}
           generate_release_notes: true
@@ -76,15 +76,15 @@ jobs:
             script: package:win
           - os: macos-latest
             script: package:mac
-          - os: ubuntu-latest
+          - os: ubuntu-26.04
             script: package:linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - run: npm ci
@@ -93,7 +93,7 @@ jobs:
         run: npm run ${{ matrix.script }} --workspace desktop
 
       - name: Attach installer to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             desktop/release/*.exe

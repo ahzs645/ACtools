@@ -7,16 +7,16 @@ on:
 
 jobs:
   extension:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       # The extension checks do not run Electron; skip its 100 MB download.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - run: npm ci
@@ -24,20 +24,21 @@ jobs:
       - name: Type check (extension, core, desktop)
         run: npm run typecheck
 
-      - name: Build extension
-        run: npm run build
+      # Same step the release workflow runs, so a broken zip shows up before tagging.
+      - name: Build and package extension
+        run: npm run package
 
       - name: Shift Lab tests
         run: npm run test:shift-lab
 
   desktop:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - run: npm ci
@@ -48,7 +49,11 @@ jobs:
       - name: Headless smoke test
         run: xvfb-run -a -s "-screen 0 1280x900x24" npm run desktop:smoke
 
-      - uses: actions/upload-artifact@v4
+      # The release builds this AppImage on the same image; catch packaging breaks here first.
+      - name: Package Linux AppImage
+        run: npm run package:linux --workspace desktop
+
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-smoke-screenshot
           path: desktop/smoke.png
